@@ -6,9 +6,16 @@
  * Version:           0.0.1-beta
  * Requires at least: 6.0
  * Requires PHP:      8.1
- * Author:            Your Name
+ * Author:            Noor Nabiul Alam Siddiqui
+ * GitHub Plugin URI: https://github.com/noor-siddiqui/Opti-Analytics
  * Text Domain:       opti-analytics
  * Domain Path:       /languages
+ *
+ * @package OptiAnalytics
+ * @author  Noor Nabiul Alam Siddiqui <siddiqui.sazal@gmail.com>
+ * @license https://github.com/noor-siddiqui/Opti-Analytics?tab=GPL-3.0-1-ov-file GNU General Public License v3.0
+ * @link    https://github.com/noor-siddiqui/Opti-Analytics
+ * @since   0.1.0-beta
  */
 
 // Enforce strict typing to catch errors early.
@@ -18,27 +25,67 @@ declare(strict_types=1);
 namespace OptiAnalytics;
 
 // Security Best Practice: Exit if accessed directly.
-if (!defined('ABSPATH')) {
-    exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
 // Define helpful plugin constants for paths and URLs.
-define('OPTI_ANALYTICS_VERSION', '0.0.1-beta');
-define('OPTI_ANALYTICS_PLUGIN_DIR', plugin_dir_path(__FILE__));
-define('OPTI_ANALYTICS_PLUGIN_URL', plugin_dir_url(__FILE__));
+define( 'OPTI_ANALYTICS_VERSION', '0.0.1-beta' );
+define( 'OPTI_ANALYTICS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+define( 'OPTI_ANALYTICS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-// Require the main core class.
-// Note: In the next step, we will replace this manual require with Composer's autoloader.
-require_once OPTI_ANALYTICS_PLUGIN_DIR . 'includes/class-core.php';
+// Require Composer's autoloader.
+if ( file_exists( OPTI_ANALYTICS_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
+	require_once OPTI_ANALYTICS_PLUGIN_DIR . 'vendor/autoload.php';
+}
+
+/**
+ * Declare compatibility with WooCommerce High-Performance Order Storage (HPOS).
+ */
+add_action(
+	'before_woocommerce_init',
+	function () {
+		if ( class_exists( '\Automattic\WooCommerce\Utilities\FeaturesUtil' ) ) {
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+		}
+	}
+);
 
 /**
  * Bootstraps the plugin.
  * We hook this to 'plugins_loaded' to ensure all other plugins (like WooCommerce) are loaded first.
  */
-function init(): void
-{
-    // Instantiate our main class
-    $plugin_core = new Core();
-    $plugin_core->run();
+function init(): void {
+
+	// Check if WooCommerce is installed and active.
+	if ( ! class_exists( 'WooCommerce' ) ) {
+		// If not, show an error notice and stop loading our plugin.
+		add_action( 'admin_notices', __NAMESPACE__ . '\missing_woocommerce_notice' );
+		return;
+	}
+
+	// If we reach this point, WooCommerce is active! We can safely start our plugin.
+	if ( is_admin() ) {
+		$plugin_core = new Core();
+		$plugin_core->run();
+	}
 }
-add_action('plugins_loaded', __NAMESPACE__ . '\init');
+add_action( 'plugins_loaded', __NAMESPACE__ . '\init' );
+
+/**
+ * Displays an admin notice if WooCommerce is not active.
+ */
+function missing_woocommerce_notice(): void {
+	// Only show to users who can actually install/activate plugins.
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	?>
+	<div class="notice notice-error is-dismissible">
+		<p>
+			<strong><?php esc_html_e( 'Opti Analytics:', 'opti-analytics' ); ?></strong> 
+			<?php esc_html_e( 'This plugin requires WooCommerce to be installed and active. Please activate WooCommerce to use Opti Analytics.', 'opti-analytics' ); ?>
+		</p>
+	</div>
+	<?php
+}

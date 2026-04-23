@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<ruleset name="Opti Analytics Ruleset">
+    <description>Custom ruleset for Opti Analytics plugin.</description>
+
+    <!-- Only scan PHP files. -->
+    <arg name="extensions" value="php"/>
+
+    <!-- Check up to 20 files simultaneously. -->
+    <arg name="parallel" value="10"/>
+
+    <file>.</file>
+
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/assets/*</exclude-pattern>
+    <exclude-pattern>*/languages/*</exclude-pattern>
+    <exclude-pattern>*/plugin-update-checker/*</exclude-pattern>
+
+    <rule ref="WordPress-Core">
+        <exclude name="WordPress.Files.FileName"/>
+    </rule>
+    <rule ref="WordPress-Docs" />
+    <rule ref="WordPress-Extra" />
+
+    <config name="testVersion" value="8.1-"/>
+
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="opti-analytics"/>
+            </property>
+        </properties>
+    </rule>
+
+        <rule ref="WordPress.WP.Capabilities">
+        <properties>
+            <property name="custom_capabilities" type="array">
+                <element value="manage_woocommerce"/>
+            </property>
+        </properties>
+    </rule>
+
+</ruleset>

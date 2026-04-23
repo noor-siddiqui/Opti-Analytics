@@ -1,0 +1,28 @@
+{
+    "require": {
+        "phpoffice/phpspreadsheet": "^5.7"
+    },
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
+        "squizlabs/php_codesniffer": "^3.13",
+        "wp-coding-standards/wpcs": "^3.3"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "OptiAnalytics\\": "includes/"
+        }
+    },
+    "scripts": {
+        "phpcs": "phpcs --report-file=phpcs_report.txt",
+        "phpcbf": "phpcbf",
+        "check": [
+            "@phpcbf",
+            "@phpcs"
+        ]
+    }
+}

@@ -1,6 +1,7 @@
 # Editors and IDEs
 .idea/
 .vscode/
+.agents/
 *.swp
 *.swo
 
@@ -21,3 +22,4 @@ Thumbs.db
 # Composer/NPM (Uncomment if used in the future)
 vendor/
 node_modules/
+
