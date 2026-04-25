@@ -257,6 +257,11 @@ class Dashboard {
 			'off_total'               => 0.0,
 			'cogs'                    => 0.0,
 			'actual_shipping_cost'    => 0.0,
+			'total_revenue'           => 0.0,
+			'total_costs'             => 0.0,
+			'gross_profit'            => 0.0,
+			'net_profit'              => 0.0,
+			'profit_margin'           => 0.0,
 		);
 		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
 			$metrics = $engine->get_dashboard_metrics( $dates['start'], $dates['end'] );
@@ -324,9 +329,9 @@ class Dashboard {
 				'default' => true,
 			),
 			'average_items_per_order' => array(
-				'label'   => 'Average items per order',
-				'value'   => esc_html( (string) $metrics['average_items_per_order'] ),
-				'desc'    => 'Average number of items per order',
+				'label'   => __( 'Average items per order', 'opti-analytics' ),
+				'value'   => esc_html( (string) round( $metrics['average_items_per_order'], 1 ) ),
+				'desc'    => __( 'Average number of items per order', 'opti-analytics' ),
 				'default' => true,
 			),
 			'out_of_stock'            => array(
@@ -338,34 +343,83 @@ class Dashboard {
 			),
 		);
 
-		// Add order-level custom fields.
-		$custom_fields_string = get_option( Settings::OPTION_NAME, '' );
-		$custom_fields        = array_filter( array_map( 'trim', explode( ',', $custom_fields_string ) ) );
-		foreach ( $custom_fields as $field ) {
-			if ( isset( $metrics[ $field ] ) ) {
-				$kpis[ $field ] = array(
-					'label'   => Data_Engine::get_custom_field_label( $field ),
-					'value'   => wp_kses_post( wc_price( $metrics[ $field ] ) ),
-					'desc'    => __( 'Order-level custom field (summed per order)', 'opti-analytics' ),
-					'default' => false,
-				);
+		// Add custom revenue & cost fields as KPI cards.
+		$pnl_custom_groups = array(
+			array(
+				'fields' => Settings::parse_csv_option( Settings::PNL_REVENUE_ORDER_FIELDS ),
+				'desc'   => __( 'Revenue — order-level (summed per order)', 'opti-analytics' ),
+			),
+			array(
+				'fields' => Settings::parse_csv_option( Settings::PNL_REVENUE_PRODUCT_FIELDS ),
+				'desc'   => __( 'Revenue — line item (value × qty)', 'opti-analytics' ),
+			),
+			array(
+				'fields' => Settings::parse_csv_option( Settings::PNL_COST_ORDER_FIELDS ),
+				'desc'   => __( 'Cost — order-level (summed per order)', 'opti-analytics' ),
+			),
+			array(
+				'fields' => Settings::parse_csv_option( Settings::PNL_COST_PRODUCT_FIELDS ),
+				'desc'   => __( 'Cost — line item (value × qty)', 'opti-analytics' ),
+			),
+		);
+
+		foreach ( $pnl_custom_groups as $group ) {
+			foreach ( $group['fields'] as $field ) {
+				if ( isset( $metrics[ $field ] ) ) {
+					$kpis[ $field ] = array(
+						'label'   => Data_Engine::get_custom_field_label( $field ),
+						'value'   => wp_kses_post( wc_price( $metrics[ $field ] ) ),
+						'desc'    => $group['desc'],
+						'default' => true,
+					);
+				}
 			}
 		}
 
-		// Add line-item-level custom fields.
-		$product_fields_string = get_option( Settings::PRODUCT_FIELDS_OPTION, '' );
-		$product_fields        = array_filter( array_map( 'trim', explode( ',', $product_fields_string ) ) );
-		foreach ( $product_fields as $field ) {
-			if ( isset( $metrics[ $field ] ) ) {
-				$kpis[ $field ] = array(
-					'label'   => Data_Engine::get_custom_field_label( $field ),
-					'value'   => wp_kses_post( wc_price( $metrics[ $field ] ) ),
-					'desc'    => __( 'Line item field (value × qty per item sold)', 'opti-analytics' ),
-					'default' => false,
-				);
-			}
-		}
+		// ── P&L KPI cards ───────────────────────────────────────────
+		$profit_color = $metrics['net_profit'] >= 0 ? '#16a34a' : '#dc2626';
+		$gross_color  = $metrics['gross_profit'] >= 0 ? '#16a34a' : '#dc2626';
+		$margin_color = $metrics['profit_margin'] >= 0 ? '#16a34a' : '#dc2626';
+
+		$pnl_kpis = array(
+			'total_revenue' => array(
+				'label'   => __( 'Total Revenue', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['total_revenue'] ) ),
+				'desc'    => __( 'Sum of all selected revenue sources', 'opti-analytics' ),
+				'default' => true,
+			),
+			'total_costs'   => array(
+				'label'   => __( 'Total Costs', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['total_costs'] ) ),
+				'desc'    => __( 'Sum of all selected cost sources', 'opti-analytics' ),
+				'default' => true,
+				'color'   => '#dc2626',
+			),
+			'gross_profit'  => array(
+				'label'   => __( 'Gross Profit', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['gross_profit'] ) ),
+				'desc'    => __( 'Total Revenue − COGS', 'opti-analytics' ),
+				'default' => true,
+				'color'   => $gross_color,
+			),
+			'net_profit'    => array(
+				'label'   => __( 'Net Profit', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['net_profit'] ) ),
+				'desc'    => __( 'Total Revenue − All Costs', 'opti-analytics' ),
+				'default' => true,
+				'color'   => $profit_color,
+			),
+			'profit_margin' => array(
+				'label'   => __( 'Profit Margin', 'opti-analytics' ),
+				'value'   => esc_html( round( $metrics['profit_margin'], 1 ) . '%' ),
+				'desc'    => __( '(Net Profit ÷ Revenue) × 100', 'opti-analytics' ),
+				'default' => true,
+				'color'   => $margin_color,
+			),
+		);
 		?>
+
+		<!-- ═══════════ PERFORMANCE SECTION ═══════════ -->
 		<div class="opti-stats-header">
 			<h2 class="opti-section-title"><?php esc_html_e( 'Performance', 'opti-analytics' ); ?></h2>
 			<div class="opti-dropdown-wrap">
@@ -396,6 +450,25 @@ class Dashboard {
 						<?php echo esc_html( $kpi['label'] ); ?>
 					</div>
 					<div class="kpi-cell-value"><?php echo $kpi['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Values are escaped during array construction. ?></div>
+					<div class="kpi-cell-desc">(<?php echo esc_html( $kpi['desc'] ); ?>)</div>
+				</div>
+			<?php endforeach; ?>
+		</div>
+
+		<!-- ═══════════ PROFIT & LOSS SECTION ═══════════ -->
+		<div class="opti-stats-header" style="margin-top: 30px;">
+			<h2 class="opti-section-title"><?php esc_html_e( 'Profit & Loss', 'opti-analytics' ); ?></h2>
+		</div>
+
+		<div class="opti-dashboard-grid opti-pnl-grid">
+			<?php foreach ( $pnl_kpis as $key => $kpi ) : ?>
+				<div class="kpi-cell" data-kpi="<?php echo esc_attr( $key ); ?>">
+					<div class="kpi-cell-title" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
+						<?php echo esc_html( $kpi['label'] ); ?>
+					</div>
+					<div class="kpi-cell-value" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
+						<?php echo $kpi['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Values are escaped during array construction. ?>
+					</div>
 					<div class="kpi-cell-desc">(<?php echo esc_html( $kpi['desc'] ); ?>)</div>
 				</div>
 			<?php endforeach; ?>
