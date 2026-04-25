@@ -244,87 +244,123 @@ class Dashboard {
 	private function render_performance_kpis( array $dates ): void {
 		$engine  = new Data_Engine();
 		$metrics = array(
-			'total_sales'       => 0.0,
-			'net_sales'         => 0.0,
-			'gross_sales'       => 0.0,
-			'orders_count'      => 0,
-			'products_sold'     => 0,
-			'shipping'          => 0.0,
-			'out_of_stock'      => 0,
-			'aov'               => 0.0,
-			'discounted_orders' => 0,
+			'total_sales'             => 0.0,
+			'net_sales'               => 0.0,
+			'gross_sales'             => 0.0,
+			'orders_count'            => 0.0,
+			'products_sold'           => 0.0,
+			'average_items_per_order' => 0.0,
+			'shipping'                => 0.0,
+			'out_of_stock'            => 0.0,
+			'aov'                     => 0.0,
+			'discounted_total'        => 0.0,
+			'off_total'               => 0.0,
+			'cogs'                    => 0.0,
+			'actual_shipping_cost'    => 0.0,
 		);
 		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
 			$metrics = $engine->get_dashboard_metrics( $dates['start'], $dates['end'] );
 		}
 
 		$kpis = array(
-			'total_sales'       => array(
+			'total_sales'             => array(
 				'label'   => __( 'Total sales', 'opti-analytics' ),
 				'value'   => wp_kses_post( wc_price( $metrics['total_sales'] ) ),
 				'desc'    => __( 'What customer paid', 'opti-analytics' ),
 				'default' => true,
 			),
-			'gross_sales'       => array(
+			'gross_sales'             => array(
 				'label'   => __( 'Gross sales', 'opti-analytics' ),
 				'value'   => wp_kses_post( wc_price( $metrics['gross_sales'] ) ),
-				'desc'    => __( 'Total product sales before discounts and taxes', 'opti-analytics' ),
+				'desc'    => __( 'Selling price × quantity ordered', 'opti-analytics' ),
 				'default' => true,
 			),
-			'net_sales'         => array(
+			'net_sales'               => array(
 				'label'   => __( 'Net sales', 'opti-analytics' ),
 				'value'   => wp_kses_post( wc_price( $metrics['net_sales'] ) ),
-				'desc'    => __( 'Gross sales minus refunds and discounts', 'opti-analytics' ),
+				'desc'    => __( 'Gross sales minus refunds & discounts', 'opti-analytics' ),
 				'default' => true,
 			),
-			'aov'               => array(
+			'aov'                     => array(
 				'label'   => __( 'Average order value', 'opti-analytics' ),
 				'value'   => wp_kses_post( wc_price( $metrics['aov'] ) ),
 				'desc'    => __( 'Net sales divided by number of orders', 'opti-analytics' ),
 				'default' => true,
 			),
-			'orders_count'      => array(
+			'shipping'                => array(
+				'label'   => __( 'Shipping collected', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['shipping'] ) ),
+				'desc'    => __( 'Total shipping charges collected', 'opti-analytics' ),
+				'default' => true,
+			),
+			'actual_shipping_cost'    => array(
+				'label'   => __( 'Actual shipping cost', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['actual_shipping_cost'] ) ),
+				'desc'    => __( 'Total actual shipping cost', 'opti-analytics' ),
+				'default' => true,
+			),
+			'cogs'                    => array(
+				'label'   => __( 'COGS', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['cogs'] ) ),
+				'desc'    => __( 'Total cost of goods sold', 'opti-analytics' ),
+				'default' => true,
+			),
+			'discounted_total'        => array(
+				'label'   => __( 'Discounted / Sale', 'opti-analytics' ),
+				'value'   => wp_kses_post( wc_price( $metrics['discounted_total'] ) . ' / ' . wc_price( $metrics['off_total'] ) ),
+				'desc'    => __( 'Total value of discounts & sales', 'opti-analytics' ),
+				'default' => true,
+			),
+			'orders_count'            => array(
 				'label'   => __( 'Orders', 'opti-analytics' ),
 				'value'   => esc_html( (string) $metrics['orders_count'] ),
 				'desc'    => __( 'The number of new orders placed', 'opti-analytics' ),
 				'default' => true,
 			),
-			'products_sold'     => array(
+			'products_sold'           => array(
 				'label'   => __( 'Products sold', 'opti-analytics' ),
 				'value'   => esc_html( (string) $metrics['products_sold'] ),
 				'desc'    => __( 'Total quantity of all items purchased', 'opti-analytics' ),
 				'default' => true,
 			),
-			'discounted_orders' => array(
-				'label'   => __( 'Discounted orders', 'opti-analytics' ),
-				'value'   => esc_html( (string) $metrics['discounted_orders'] ),
-				'desc'    => __( 'Number of orders containing a discount', 'opti-analytics' ),
+			'average_items_per_order' => array(
+				'label'   => 'Average items per order',
+				'value'   => esc_html( (string) $metrics['average_items_per_order'] ),
+				'desc'    => 'Average number of items per order',
 				'default' => true,
 			),
-			'out_of_stock'      => array(
+			'out_of_stock'            => array(
 				'label'   => __( 'Out of stock', 'opti-analytics' ),
 				'value'   => esc_html( (string) $metrics['out_of_stock'] ),
 				'desc'    => __( 'Number of products currently out of stock', 'opti-analytics' ),
 				'default' => true,
 				'color'   => 'red',
 			),
-			'shipping'          => array(
-				'label'   => __( 'Shipping', 'opti-analytics' ),
-				'value'   => wp_kses_post( wc_price( $metrics['shipping'] ) ),
-				'desc'    => __( 'Total shipping charges collected', 'opti-analytics' ),
-				'default' => true,
-			),
 		);
 
-		// Add custom fields.
+		// Add order-level custom fields.
 		$custom_fields_string = get_option( Settings::OPTION_NAME, '' );
 		$custom_fields        = array_filter( array_map( 'trim', explode( ',', $custom_fields_string ) ) );
 		foreach ( $custom_fields as $field ) {
 			if ( isset( $metrics[ $field ] ) ) {
 				$kpis[ $field ] = array(
 					'label'   => Data_Engine::get_custom_field_label( $field ),
-					'value'   => esc_html( (string) $metrics[ $field ] ),
-					'desc'    => __( 'Custom field value', 'opti-analytics' ),
+					'value'   => wp_kses_post( wc_price( $metrics[ $field ] ) ),
+					'desc'    => __( 'Order-level custom field (summed per order)', 'opti-analytics' ),
+					'default' => false,
+				);
+			}
+		}
+
+		// Add line-item-level custom fields.
+		$product_fields_string = get_option( Settings::PRODUCT_FIELDS_OPTION, '' );
+		$product_fields        = array_filter( array_map( 'trim', explode( ',', $product_fields_string ) ) );
+		foreach ( $product_fields as $field ) {
+			if ( isset( $metrics[ $field ] ) ) {
+				$kpis[ $field ] = array(
+					'label'   => Data_Engine::get_custom_field_label( $field ),
+					'value'   => wp_kses_post( wc_price( $metrics[ $field ] ) ),
+					'desc'    => __( 'Line item field (value × qty per item sold)', 'opti-analytics' ),
 					'default' => false,
 				);
 			}

@@ -37,6 +37,21 @@ define( 'OPTI_ANALYTICS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // Require Composer's autoloader.
 if ( file_exists( OPTI_ANALYTICS_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
 	require_once OPTI_ANALYTICS_PLUGIN_DIR . 'vendor/autoload.php';
+} else {
+	add_action(
+		'admin_notices',
+		function () {
+			?>
+		<div class="notice notice-error is-dismissible">
+			<p>
+				<strong><?php esc_html_e( 'Opti Analytics:', 'opti-analytics' ); ?></strong> 
+				<?php esc_html_e( 'There is some error. Please raise and issue in Github. Link: https://github.com/noor-siddiqui/Opti-Analytics/issues', 'opti-analytics' ); ?>
+			</p>
+		</div>
+			<?php
+		}
+	);
+	return;
 }
 
 /**
@@ -65,10 +80,10 @@ function init(): void {
 	}
 
 	// If we reach this point, WooCommerce is active! We can safely start our plugin.
-	if ( is_admin() ) {
-		$plugin_core = new Core();
-		$plugin_core->run();
-	}
+	// NOTE: We must NOT gate this behind is_admin() because Order_Snapshot hooks
+	// (e.g. woocommerce_checkout_create_order_line_item) fire during frontend checkout.
+	$plugin_core = new Core();
+	$plugin_core->run();
 }
 add_action( 'plugins_loaded', __NAMESPACE__ . '\init' );
 

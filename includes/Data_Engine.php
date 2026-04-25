@@ -55,18 +55,22 @@ class Data_Engine {
 		$orders = wc_get_orders( $args );
 
 		$metrics = array(
-			'total_sales'       => 0.0,
-			'net_sales'         => 0.0,
-			'gross_sales'       => 0.0,
-			'orders_count'      => count( $orders ),
-			'products_sold'     => 0,
-			'shipping'          => 0.0,
-			'out_of_stock'      => 0,
-			'aov'               => 0.0,
-			'discounted_orders' => 0,
+			'total_sales'             => 0.0,
+			'net_sales'               => 0.0,
+			'gross_sales'             => 0.0,
+			'orders_count'            => count( $orders ),
+			'products_sold'           => 0.0,
+			'average_items_per_order' => 0.0,
+			'shipping'                => 0.0,
+			'out_of_stock'            => 0.0,
+			'aov'                     => 0.0,
+			'discounted_total'        => 0.0,
+			'off_total'               => 0.0,
+			'cogs'                    => 0.0,
+			'actual_shipping_cost'    => 0.0,
 		);
 
-		// Get custom fields from settings.
+		// Get order-level custom fields from settings.
 		$custom_fields_string = get_option( Settings::OPTION_NAME, '' );
 		$custom_fields        = array_filter( array_map( 'trim', explode( ',', $custom_fields_string ) ) );
 
@@ -74,28 +78,75 @@ class Data_Engine {
 			$metrics[ $field ] = 0.0;
 		}
 
+		// Get line-item-level custom fields from settings (e.g. snapshotted COGS).
+		$product_fields_string = get_option( Settings::PRODUCT_FIELDS_OPTION, '' );
+		$product_fields        = array_filter( array_map( 'trim', explode( ',', $product_fields_string ) ) );
+
+		foreach ( $product_fields as $field ) {
+			$metrics[ $field ] = 0.0;
+		}
+
 		foreach ( $orders as $order ) {
+
 			$total    = (float) $order->get_total();
 			$tax      = (float) $order->get_total_tax();
 			$shipping = (float) $order->get_shipping_total();
 			$refunds  = (float) $order->get_total_refunded();
 			$subtotal = (float) $order->get_subtotal();
 
-			$metrics['total_sales'] += $total;
-			$metrics['net_sales']   += ( $total - $tax - $shipping - $refunds );
-			$metrics['gross_sales'] += $subtotal;
-			$metrics['shipping']    += $shipping;
+			$metrics['total_sales']      += $total;
+			$metrics['net_sales']        += ( $total - $tax - $shipping - $refunds );
+			$metrics['gross_sales']      += $subtotal;
+			$metrics['shipping']         += $shipping;
+			$metrics['discounted_total'] += (float) $order->get_total_discount();
 
-			if ( (float) $order->get_discount_total() > 0 ) {
-				++$metrics['discounted_orders'];
+			$actual_shipping_cost = self::get_order_meta_value( $order, '_opti_manual_shipping_cost' );
+
+			if ( is_numeric( $actual_shipping_cost ) ) {
+				$metrics['actual_shipping_cost'] += (float) $actual_shipping_cost;
+			} else {
+				$actual_shipping_cost = self::get_order_meta_value( $order, '_sa_manual_shipping_csv' );
+				if ( is_numeric( $actual_shipping_cost ) ) {
+					$metrics['actual_shipping_cost'] += (float) $actual_shipping_cost;
+				} else {
+					$metrics['actual_shipping_cost'] += $metrics['shipping'];
+				}
 			}
 
 			foreach ( $order->get_items() as $item ) {
-				$metrics['products_sold'] += $item->get_quantity();
+
+				$qty                       = $item->get_quantity();
+				$metrics['products_sold'] += $qty;
+
+				// COGS: per-item cost × quantity.
+				// Use product-level COGS when available, otherwise order-level.
+				// check if meta exists else return 0.
+				if ( $item->meta_exists( '_oa_historical_cogs' ) ) {
+					$per_item_cogs    = (float) $item->get_meta( '_oa_historical_cogs' );
+					$metrics['cogs'] += $per_item_cogs * $qty;
+				} elseif ( $item->meta_exists( '_historical_cogs' ) ) {
+					$per_item_cogs    = (float) $item->get_meta( '_historical_cogs' );
+					$metrics['cogs'] += $per_item_cogs * $qty;
+				}
+
+				// Aggregate line-item-level fields (e.g. _historical_cogs): value × quantity.
+				// These are stored on the order item via $item->add_meta_data().
+				foreach ( $product_fields as $field ) {
+					$val = $item->get_meta( $field );
+					if ( is_numeric( $val ) ) {
+						$metrics[ $field ] += (float) $val * $qty;
+					}
+				}
+
+				if ( $item->meta_exists( '_oa_discount_amount' ) ) {
+					$discount_amount       = (float) $item->get_meta( '_oa_discount_amount' );
+					$metrics['off_total'] += $discount_amount * $qty;
+				}
 			}
 
+			// Aggregate order-level custom fields.
 			foreach ( $custom_fields as $field ) {
-				$val = $order->get_meta( $field );
+				$val = self::get_order_meta_value( $order, $field );
 				if ( is_numeric( $val ) ) {
 					$metrics[ $field ] += (float) $val;
 				}
@@ -119,9 +170,34 @@ class Data_Engine {
 		$oos_query               = new \WP_Query( $args_oos );
 		$metrics['out_of_stock'] = $oos_query->found_posts;
 
-		$metrics['aov'] = $metrics['orders_count'] > 0 ? ( $metrics['net_sales'] / $metrics['orders_count'] ) : 0.0;
+		if ( $metrics['orders_count'] > 0 ) {
+			$metrics['average_items_per_order'] = $metrics['products_sold'] / $metrics['orders_count'];
+			$metrics['aov']                     = $metrics['net_sales'] / $metrics['orders_count'];
+		}
 
 		return $metrics;
+	}
+
+	/**
+	 * Retrieves a meta value from an order, checking both HPOS and legacy postmeta.
+	 *
+	 * Some plugins write directly to wp_postmeta even when HPOS is active.
+	 * This helper ensures we capture values from both storage backends.
+	 *
+	 * @param \WC_Order $order    The order object.
+	 * @param string    $meta_key The meta key to retrieve.
+	 * @return mixed The meta value, or empty string if not found.
+	 */
+	public static function get_order_meta_value( \WC_Order $order, string $meta_key ) {
+		// Try HPOS-aware CRUD method first.
+		$val = $order->get_meta( $meta_key );
+
+		// Fall back to legacy postmeta if empty.
+		if ( '' === $val || null === $val ) {
+			$val = get_post_meta( $order->get_id(), $meta_key, true );
+		}
+
+		return $val;
 	}
 
 	/**

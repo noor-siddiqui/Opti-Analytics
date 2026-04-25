@@ -35,11 +35,19 @@ class Core {
 	private Settings $settings;
 
 	/**
+	 * Instance of Order_Snapshot class.
+	 *
+	 * @var Order_Snapshot
+	 */
+	private Order_Snapshot $order_snapshot;
+
+	/**
 	 * Constructor for the core class.
 	 */
 	public function __construct() {
-		$this->dashboard = new Dashboard();
-		$this->settings  = new Settings();
+		$this->dashboard      = new Dashboard();
+		$this->settings       = new Settings();
+		$this->order_snapshot = new Order_Snapshot();
 	}
 
 	/**
@@ -50,62 +58,12 @@ class Core {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 
-		if ( get_option( Settings::MANUAL_SHIPPING_OPTION, false ) ) {
-			add_action( 'woocommerce_admin_order_data_after_shipping_address', array( $this, 'add_manual_shipping_field' ) );
-			add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_manual_shipping_field' ), 45 );
-		}
-
 		$this->dashboard->register_hooks();
 		$this->settings->register_hooks();
+		$this->order_snapshot->register_hooks();
 	}
 
-	/**
-	 * Adds the manual shipping field to the single order admin view.
-	 *
-	 * @param \WC_Order $order The WooCommerce order object.
-	 */
-	public function add_manual_shipping_field( $order ): void {
-		$manual = $order->get_meta( '_opti_manual_shipping_cost' );
-		?>
-		<p class="form-field form-field-wide wc-order-data-row" style="width: 100%;">
-			<label for="_opti_manual_shipping_cost" style="display: flex; align-items: center;">
-				<?php esc_html_e( 'Manual Shipping Cost', 'opti-analytics' ); ?>
-				<?php echo wp_kses_post( wc_help_tip( esc_html__( 'Actual shipping cost for profit calculation.', 'opti-analytics' ) ) ); ?>
-			</label>
-			<input type="number" step="0.01" min="0" id="_opti_manual_shipping_cost" name="_opti_manual_shipping_cost"
-				value="<?php echo esc_attr( (string) $manual ); ?>"
-				placeholder="<?php echo esc_attr( wc_format_localized_price( (string) $order->get_shipping_total() ) ); ?>" style="width: 100%;" />
-		</p>
-		<?php
-	}
 
-	/**
-	 * Saves the manual shipping field when the order is saved.
-	 * HPOS and non-HPOS compatible.
-	 *
-	 * @param int $order_id The ID of the order being saved.
-	 */
-	public function save_manual_shipping_field( int $order_id ): void {
-		$order = wc_get_order( $order_id );
-		if ( ! $order ) {
-			return;
-		}
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		if ( isset( $_POST['_opti_manual_shipping_cost'] ) ) {
-			// phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$value = sanitize_text_field( wp_unslash( $_POST['_opti_manual_shipping_cost'] ) );
-
-			if ( '' !== $value && is_numeric( $value ) && 0 <= (float) $value ) {
-				$order->update_meta_data( '_opti_manual_shipping_cost', $value );
-			} else {
-				$order->delete_meta_data( '_opti_manual_shipping_cost' );
-			}
-
-			// We must save meta data here since the hook processes post data.
-			$order->save_meta_data();
-		}
-	}
 
 	/**
 	 * Enqueues common admin scripts and styles for the plugin.
@@ -129,13 +87,22 @@ class Core {
 	 * Registers the Opti Analytics menu in the WordPress admin.
 	 */
 	public function register_menu(): void {
+
+		// Cache the base64-encoded SVG to avoid reading from disk on every admin page load.
+		static $icon_data = null;
+		if ( null === $icon_data ) {
+			$icon_path = OPTI_ANALYTICS_PLUGIN_DIR . 'assets/img/menu_icon.svg';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Reading a local bundled SVG icon and base64 encoding it for the menu icon.
+			$icon_data = 'data:image/svg+xml;base64,' . base64_encode( file_get_contents( $icon_path ) );
+		}
+
 		add_menu_page(
 			__( 'Opti Analytics', 'opti-analytics' ),
 			__( 'Opti Analytics', 'opti-analytics' ),
 			'manage_woocommerce',
 			'opti-analytics',
 			array( $this->dashboard, 'render_dashboard_page' ), // Pointed to our new Dashboard class!
-			'dashicons-chart-bar',
+			$icon_data,
 			57
 		);
 	}
