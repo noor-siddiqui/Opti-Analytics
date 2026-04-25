@@ -1,0 +1,53 @@
+name: Build and Package Plugin Release
+
+# 1. When should this script run?
+# We only want it to run when you publish a new "Release" on GitHub.
+on:
+  release:
+    types: [published]
+
+# 2. What jobs should it perform?
+jobs:
+  build:
+    name: Build ZIP file
+    runs-on: ubuntu-latest # The temporary server environment
+
+    steps:
+      # Step A: Get our code from the repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step B: Set up PHP on the server
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      # Step C: Install ONLY the production Composer packages
+      - name: Install Composer Dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      # Step D: Package the files into a clean folder, ignoring dev files
+      - name: Create Clean Directory
+        run: |
+          mkdir opti-analytics
+          # Copy files into the new folder, explicitly ignoring files users don't need
+          rsync -r --exclude='.git/' \
+                   --exclude='.github/' \
+                   --exclude='.gitignore' \
+                   --exclude='phpcs.xml.dist' \
+                   --exclude='composer.json' \
+                   --exclude='composer.lock' \
+                   ./ opti-analytics/
+
+      # Step E: Zip the clean folder
+      - name: Zip Plugin
+        run: zip -r opti-analytics.zip opti-analytics/
+
+      # Step F: Upload the ZIP to the GitHub Release page
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: opti-analytics.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
