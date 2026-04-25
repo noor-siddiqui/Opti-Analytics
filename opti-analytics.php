@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Opti Analytics
- * Plugin URI:        https://example.com/opti-analytics
+ * Plugin URI:        https://github.com/noor-siddiqui/Opti-Analytics
  * Description:       A custom sales analytics plugin for WooCommerce supporting dynamic custom fields and Excel exports.
  * Version:           0.0.1-beta
  * Requires at least: 6.0
@@ -103,4 +103,29 @@ function missing_woocommerce_notice(): void {
 		</p>
 	</div>
 	<?php
+}
+
+// Setup automatic plugin updates using Plugin Update Checker (PUC).
+if ( file_exists( OPTI_ANALYTICS_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php' ) ) {
+	include_once OPTI_ANALYTICS_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
+
+	try {
+		$my_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+			'https://github.com/noor-siddiqui/Opti-Analytics',
+			__FILE__,
+			'opti-analytics'
+		);
+		$my_update_checker->setBranch( 'main' );
+	} catch ( \Exception $e ) {
+		add_action(
+			'admin_notices',
+			function () {
+				?>
+	<div class="notice notice-success is-dismissible">
+		<p>There is an error while Updating Opti Analytics. Please contact with admin.</p>
+	</div>
+				<?php
+			}
+		);
+	}
 }
