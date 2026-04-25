@@ -35,6 +35,10 @@ class Settings {
 	public const PNL_COST_ORDER_FIELDS      = 'opti_analytics_pnl_cost_order_fields';
 	public const PNL_COST_PRODUCT_FIELDS    = 'opti_analytics_pnl_cost_product_fields';
 
+	// ── View Only: display on dashboard but no P&L impact ──────────
+	public const VIEWONLY_ORDER_FIELDS   = 'opti_analytics_viewonly_order_fields';
+	public const VIEWONLY_PRODUCT_FIELDS = 'opti_analytics_viewonly_product_fields';
+
 	/**
 	 * Built-in revenue sources the store owner can toggle.
 	 */
@@ -108,6 +112,8 @@ class Settings {
 			self::PNL_REVENUE_PRODUCT_FIELDS,
 			self::PNL_COST_ORDER_FIELDS,
 			self::PNL_COST_PRODUCT_FIELDS,
+			self::VIEWONLY_ORDER_FIELDS,
+			self::VIEWONLY_PRODUCT_FIELDS,
 		);
 		foreach ( $csv_options as $opt ) {
 			register_setting(
@@ -149,10 +155,7 @@ class Settings {
 	/**
 	 * Gets available custom fields from recent orders across both HPOS and legacy storage.
 	 *
-	 * Queries both `wp_wc_orders_meta` (HPOS) and `wp_postmeta` (legacy) tables
-	 * directly to discover all unique meta keys, even from plugins that don't use HPOS.
-	 *
-	 * @return array<string, string> Associative array of meta_key => source label ('HPOS', 'Legacy', or 'Both').
+	 * @return array<string, string> Associative array of meta_key => source label.
 	 */
 	private function get_available_order_meta_keys(): array {
 		global $wpdb;
@@ -160,7 +163,6 @@ class Settings {
 		$hpos_keys   = array();
 		$legacy_keys = array();
 
-		// --- HPOS table: wp_wc_orders_meta ---
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$hpos_table = $wpdb->prefix . 'wc_orders_meta';
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $hpos_table ) ) === $hpos_table ) {
@@ -173,15 +175,12 @@ class Settings {
 			}
 		}
 
-		// --- Legacy table: wp_postmeta (for shop_order post types) ---
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$legacy_results = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT DISTINCT pm.meta_key
-				FROM {$wpdb->postmeta} pm
+				"SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm
 				INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-				WHERE p.post_type = %s
-				ORDER BY pm.meta_key ASC",
+				WHERE p.post_type = %s ORDER BY pm.meta_key ASC",
 				'shop_order'
 			)
 		);
@@ -189,7 +188,6 @@ class Settings {
 			$legacy_keys = array_flip( $legacy_results );
 		}
 
-		// Merge and tag the source.
 		$all_keys = array();
 		$combined = array_unique( array_merge( array_keys( $hpos_keys ), array_keys( $legacy_keys ) ) );
 		sort( $combined );
@@ -197,7 +195,6 @@ class Settings {
 		foreach ( $combined as $key ) {
 			$in_hpos   = isset( $hpos_keys[ $key ] );
 			$in_legacy = isset( $legacy_keys[ $key ] );
-
 			if ( $in_hpos && $in_legacy ) {
 				$all_keys[ $key ] = 'Both';
 			} elseif ( $in_hpos ) {
@@ -211,9 +208,7 @@ class Settings {
 	}
 
 	/**
-	 * Gets available product/variation meta keys from the database for discovery purposes.
-	 *
-	 * Queries wp_postmeta for product and product_variation post types.
+	 * Gets available product/variation meta keys.
 	 *
 	 * @return array<string> Array of unique meta keys.
 	 */
@@ -223,11 +218,9 @@ class Settings {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$results = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT DISTINCT pm.meta_key
-				FROM {$wpdb->postmeta} pm
+				"SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm
 				INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-				WHERE p.post_type IN (%s, %s)
-				ORDER BY pm.meta_key ASC",
+				WHERE p.post_type IN (%s, %s) ORDER BY pm.meta_key ASC",
 				'product',
 				'product_variation'
 			)
@@ -237,20 +230,19 @@ class Settings {
 	}
 
 	/**
-	 * Renders the HTML for the settings page.
-	 *
-	 * @return void
+	 * Renders the settings page.
 	 */
 	public function render_settings_page(): void {
-		// Retrieve existing settings.
 		$revenue_builtins       = get_option( self::PNL_REVENUE_BUILTINS, array() );
 		$cost_builtins          = get_option( self::PNL_COST_BUILTINS, array() );
 		$revenue_order_fields   = get_option( self::PNL_REVENUE_ORDER_FIELDS, '' );
 		$revenue_product_fields = get_option( self::PNL_REVENUE_PRODUCT_FIELDS, '' );
 		$cost_order_fields      = get_option( self::PNL_COST_ORDER_FIELDS, '' );
 		$cost_product_fields    = get_option( self::PNL_COST_PRODUCT_FIELDS, '' );
-		$available_keys         = $this->get_available_order_meta_keys();
-		$available_product_keys = $this->get_available_product_meta_keys();
+		$vo_order_fields        = get_option( self::VIEWONLY_ORDER_FIELDS, '' );
+		$vo_product_fields      = get_option( self::VIEWONLY_PRODUCT_FIELDS, '' );
+		$order_keys             = $this->get_available_order_meta_keys();
+		$product_keys           = $this->get_available_product_meta_keys();
 
 		if ( ! is_array( $revenue_builtins ) ) {
 			$revenue_builtins = array();
@@ -261,174 +253,166 @@ class Settings {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Opti Analytics Settings', 'opti-analytics' ); ?></h1>
+			<p style="color: #646970; margin-bottom: 20px;">
+				<?php esc_html_e( 'Configure which data feeds into your Profit & Loss calculation and dashboard.', 'opti-analytics' ); ?>
+			</p>
 
 			<form method="post" action="options.php">
 				<?php settings_fields( 'opti_analytics_settings_group' ); ?>
 
-				<!-- ═══════════════════════════════════════════════════
-					REVENUE SOURCES
-					═══════════════════════════════════════════════════ -->
-				<h2 class="title"><?php esc_html_e( '💰 Revenue Sources', 'opti-analytics' ); ?></h2>
-				<p><?php esc_html_e( 'Select the built-in metrics and custom fields that count as revenue for your P&L calculation.', 'opti-analytics' ); ?></p>
+				<?php // ── CARD 1: Revenue ──────────────────────────────── ?>
+				<div class="opti-settings-card">
+					<div class="opti-settings-card-header">
+						<span class="dashicons dashicons-money-alt"></span>
+						<h2><?php esc_html_e( 'Revenue Sources', 'opti-analytics' ); ?></h2>
+						<p><?php esc_html_e( 'Money collected from customers → feeds into P&L as revenue', 'opti-analytics' ); ?></p>
+					</div>
+					<div class="opti-settings-card-body">
+						<div class="opti-field-row">
+							<label><?php esc_html_e( 'Built-in Metrics', 'opti-analytics' ); ?></label>
+							<input type="hidden" name="<?php echo esc_attr( self::PNL_REVENUE_BUILTINS ); ?>" value="">
+							<fieldset>
+								<?php foreach ( self::BUILTIN_REVENUE_SOURCES as $key => $label ) : ?>
+									<label style="display: block; margin-bottom: 6px; font-weight: normal;">
+										<input type="checkbox" name="<?php echo esc_attr( self::PNL_REVENUE_BUILTINS ); ?>[]"
+											value="<?php echo esc_attr( $key ); ?>"
+											<?php checked( in_array( $key, $revenue_builtins, true ) ); ?> />
+										<?php echo esc_html( $label ); ?>
+									</label>
+								<?php endforeach; ?>
+							</fieldset>
+						</div>
+						<?php
+						$this->render_meta_field_row(
+							'revenue_order_fields_input',
+							self::PNL_REVENUE_ORDER_FIELDS,
+							$revenue_order_fields,
+							__( 'Custom Order Meta', 'opti-analytics' ),
+							__( 'Order-level meta keys — summed once per order.', 'opti-analytics' ),
+							'_tip_amount, _insurance_fee',
+							$order_keys,
+							'opti-rev-order',
+							true
+						);
+						$this->render_meta_field_row(
+							'revenue_product_fields_input',
+							self::PNL_REVENUE_PRODUCT_FIELDS,
+							$revenue_product_fields,
+							__( 'Custom Line Item Meta', 'opti-analytics' ),
+							__( 'Line-item meta keys — aggregated as value × quantity.', 'opti-analytics' ),
+							'_custom_revenue_per_unit',
+							$product_keys,
+							'opti-rev-prod',
+							false
+						);
+						?>
+					</div>
+				</div>
 
-				<table class="form-table" role="presentation">
-					<tbody>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Built-in Revenue', 'opti-analytics' ); ?></th>
-							<td>
-								<!-- Hidden field ensures an empty array is submitted when nothing is checked. -->
-								<input type="hidden" name="<?php echo esc_attr( self::PNL_REVENUE_BUILTINS ); ?>" value="">
-								<fieldset>
-									<?php foreach ( self::BUILTIN_REVENUE_SOURCES as $key => $label ) : ?>
-										<label style="display: block; margin-bottom: 6px;">
-											<input type="checkbox"
-												name="<?php echo esc_attr( self::PNL_REVENUE_BUILTINS ); ?>[]"
-												value="<?php echo esc_attr( $key ); ?>"
-												<?php checked( in_array( $key, $revenue_builtins, true ) ); ?> />
-											<?php echo esc_html( $label ); ?>
-										</label>
-									<?php endforeach; ?>
-								</fieldset>
-								<p class="description">
-									<?php esc_html_e( 'Choose which built-in metrics represent money collected from customers.', 'opti-analytics' ); ?>
-								</p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row">
-								<label for="revenue_order_fields_input">
-									<?php esc_html_e( 'Custom Revenue (Order Meta)', 'opti-analytics' ); ?>
-								</label>
-							</th>
-							<td>
-								<input type="text"
-									id="revenue_order_fields_input"
-									name="<?php echo esc_attr( self::PNL_REVENUE_ORDER_FIELDS ); ?>"
-									value="<?php echo esc_attr( $revenue_order_fields ); ?>"
-									class="regular-text"
-									placeholder="_tip_amount, _insurance_fee" />
-								<p class="description">
-									<?php esc_html_e( 'Order-level meta keys to include as revenue. Values are summed per order.', 'opti-analytics' ); ?>
-								</p>
-								<?php $this->render_click_to_add_buttons( $available_keys, 'opti-add-rev-order-btn', true ); ?>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row">
-								<label for="revenue_product_fields_input">
-									<?php esc_html_e( 'Custom Revenue (Line Item Meta)', 'opti-analytics' ); ?>
-								</label>
-							</th>
-							<td>
-								<input type="text"
-									id="revenue_product_fields_input"
-									name="<?php echo esc_attr( self::PNL_REVENUE_PRODUCT_FIELDS ); ?>"
-									value="<?php echo esc_attr( $revenue_product_fields ); ?>"
-									class="regular-text"
-									placeholder="_custom_revenue_per_unit" />
-								<p class="description">
-									<?php esc_html_e( 'Line-item meta keys to include as revenue. Aggregated as value × quantity.', 'opti-analytics' ); ?>
-								</p>
-								<?php $this->render_click_to_add_buttons( $available_product_keys, 'opti-add-rev-product-btn', false ); ?>
-							</td>
-						</tr>
-					</tbody>
-				</table>
+				<?php // ── CARD 2: Costs ───────────────────────────────── ?>
+				<div class="opti-settings-card">
+					<div class="opti-settings-card-header">
+						<span class="dashicons dashicons-cart"></span>
+						<h2><?php esc_html_e( 'Cost Sources', 'opti-analytics' ); ?></h2>
+						<p><?php esc_html_e( 'Expenses to fulfill orders → feeds into P&L as costs', 'opti-analytics' ); ?></p>
+					</div>
+					<div class="opti-settings-card-body">
+						<div class="opti-field-row">
+							<label><?php esc_html_e( 'Built-in Metrics', 'opti-analytics' ); ?></label>
+							<input type="hidden" name="<?php echo esc_attr( self::PNL_COST_BUILTINS ); ?>" value="">
+							<fieldset>
+								<?php foreach ( self::BUILTIN_COST_SOURCES as $key => $label ) : ?>
+									<label style="display: block; margin-bottom: 6px; font-weight: normal;">
+										<input type="checkbox" name="<?php echo esc_attr( self::PNL_COST_BUILTINS ); ?>[]"
+											value="<?php echo esc_attr( $key ); ?>"
+											<?php checked( in_array( $key, $cost_builtins, true ) ); ?> />
+										<?php echo esc_html( $label ); ?>
+									</label>
+								<?php endforeach; ?>
+							</fieldset>
+						</div>
+						<?php
+						$this->render_meta_field_row(
+							'cost_order_fields_input',
+							self::PNL_COST_ORDER_FIELDS,
+							$cost_order_fields,
+							__( 'Custom Order Meta', 'opti-analytics' ),
+							__( 'Order-level meta keys — summed once per order.', 'opti-analytics' ),
+							'_stripe_fee, _cod_charge',
+							$order_keys,
+							'opti-cost-order',
+							true
+						);
+						$this->render_meta_field_row(
+							'cost_product_fields_input',
+							self::PNL_COST_PRODUCT_FIELDS,
+							$cost_product_fields,
+							__( 'Custom Line Item Meta', 'opti-analytics' ),
+							__( 'Line-item meta keys — aggregated as value × quantity.', 'opti-analytics' ),
+							'_packaging_cost',
+							$product_keys,
+							'opti-cost-prod',
+							false
+						);
+						?>
+					</div>
+				</div>
 
-				<!-- ═══════════════════════════════════════════════════
-					COST SOURCES
-					═══════════════════════════════════════════════════ -->
-				<h2 class="title"><?php esc_html_e( '📦 Cost Sources', 'opti-analytics' ); ?></h2>
-				<p><?php esc_html_e( 'Select the built-in metrics and custom fields that count as costs for your P&L calculation.', 'opti-analytics' ); ?></p>
+				<?php // ── CARD 3: View Only ───────────────────────────── ?>
+				<div class="opti-settings-card">
+					<div class="opti-settings-card-header">
+						<span class="dashicons dashicons-visibility"></span>
+						<h2><?php esc_html_e( 'View Only Fields', 'opti-analytics' ); ?></h2>
+						<p><?php esc_html_e( 'Shown on dashboard as KPI cards — no impact on P&L', 'opti-analytics' ); ?></p>
+					</div>
+					<div class="opti-settings-card-body">
+						<?php
+						$this->render_meta_field_row(
+							'vo_order_fields_input',
+							self::VIEWONLY_ORDER_FIELDS,
+							$vo_order_fields,
+							__( 'Order Meta (View Only)', 'opti-analytics' ),
+							__( 'Order-level meta keys — displayed on dashboard but excluded from P&L.', 'opti-analytics' ),
+							'_order_notes_count',
+							$order_keys,
+							'opti-vo-order',
+							true
+						);
+						$this->render_meta_field_row(
+							'vo_product_fields_input',
+							self::VIEWONLY_PRODUCT_FIELDS,
+							$vo_product_fields,
+							__( 'Line Item Meta (View Only)', 'opti-analytics' ),
+							__( 'Line-item meta keys — displayed on dashboard but excluded from P&L.', 'opti-analytics' ),
+							'_custom_attribute',
+							$product_keys,
+							'opti-vo-prod',
+							false
+						);
+						?>
+					</div>
+				</div>
 
-				<table class="form-table" role="presentation">
-					<tbody>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Built-in Costs', 'opti-analytics' ); ?></th>
-							<td>
-								<input type="hidden" name="<?php echo esc_attr( self::PNL_COST_BUILTINS ); ?>" value="">
-								<fieldset>
-									<?php foreach ( self::BUILTIN_COST_SOURCES as $key => $label ) : ?>
-										<label style="display: block; margin-bottom: 6px;">
-											<input type="checkbox"
-												name="<?php echo esc_attr( self::PNL_COST_BUILTINS ); ?>[]"
-												value="<?php echo esc_attr( $key ); ?>"
-												<?php checked( in_array( $key, $cost_builtins, true ) ); ?> />
-											<?php echo esc_html( $label ); ?>
-										</label>
-									<?php endforeach; ?>
-								</fieldset>
-								<p class="description">
-									<?php esc_html_e( 'Choose which built-in metrics represent costs of fulfilling orders.', 'opti-analytics' ); ?>
-								</p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row">
-								<label for="cost_order_fields_input">
-									<?php esc_html_e( 'Custom Costs (Order Meta)', 'opti-analytics' ); ?>
-								</label>
-							</th>
-							<td>
-								<input type="text"
-									id="cost_order_fields_input"
-									name="<?php echo esc_attr( self::PNL_COST_ORDER_FIELDS ); ?>"
-									value="<?php echo esc_attr( $cost_order_fields ); ?>"
-									class="regular-text"
-									placeholder="_stripe_fee, _cod_charge" />
-								<p class="description">
-									<?php esc_html_e( 'Order-level meta keys to include as costs. Values are summed per order.', 'opti-analytics' ); ?>
-								</p>
-								<?php $this->render_click_to_add_buttons( $available_keys, 'opti-add-cost-order-btn', true ); ?>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row">
-								<label for="cost_product_fields_input">
-									<?php esc_html_e( 'Custom Costs (Line Item Meta)', 'opti-analytics' ); ?>
-								</label>
-							</th>
-							<td>
-								<input type="text"
-									id="cost_product_fields_input"
-									name="<?php echo esc_attr( self::PNL_COST_PRODUCT_FIELDS ); ?>"
-									value="<?php echo esc_attr( $cost_product_fields ); ?>"
-									class="regular-text"
-									placeholder="_packaging_cost, _handling_fee" />
-								<p class="description">
-									<?php esc_html_e( 'Line-item meta keys to include as costs. Aggregated as value × quantity.', 'opti-analytics' ); ?>
-								</p>
-								<?php $this->render_click_to_add_buttons( $available_product_keys, 'opti-add-cost-product-btn', false ); ?>
-							</td>
-						</tr>
-					</tbody>
-				</table>
-
-				<!-- ═══════════════════════════════════════════════════
-					OTHER SETTINGS
-					═══════════════════════════════════════════════════ -->
-				<h2 class="title"><?php esc_html_e( '⚙️ Other Settings', 'opti-analytics' ); ?></h2>
-
-				<table class="form-table" role="presentation">
-					<tbody>
-						<tr>
-							<th scope="row">
-								<label for="enable_manual_shipping">
-									<?php esc_html_e( 'Enable Manual Shipping Cost', 'opti-analytics' ); ?>
-								</label>
-							</th>
-							<td>
-								<input type="checkbox"
-									id="enable_manual_shipping"
+				<?php // ── CARD 4: Other Settings ──────────────────────── ?>
+				<div class="opti-settings-card">
+					<div class="opti-settings-card-header">
+						<span class="dashicons dashicons-admin-generic"></span>
+						<h2><?php esc_html_e( 'Other Settings', 'opti-analytics' ); ?></h2>
+					</div>
+					<div class="opti-settings-card-body">
+						<div class="opti-field-row">
+							<label for="enable_manual_shipping" style="font-weight: normal;">
+								<input type="checkbox" id="enable_manual_shipping"
 									name="<?php echo esc_attr( self::MANUAL_SHIPPING_OPTION ); ?>"
 									value="1" <?php checked( get_option( self::MANUAL_SHIPPING_OPTION, false ), 1 ); ?> />
-								<p class="description">
-									<?php esc_html_e( 'Enable the manual shipping cost on the order edit screen. By enabling it you can add the actual shipping cost on the order edit screen.', 'opti-analytics' ); ?>
-								</p>
-							</td>
-						</tr>
-					</tbody>
-				</table>
+								<?php esc_html_e( 'Enable Manual Shipping Cost', 'opti-analytics' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'Adds an "Actual Shipping Cost" input field on the WooCommerce order edit screen.', 'opti-analytics' ); ?>
+							</p>
+						</div>
+					</div>
+				</div>
 
 				<?php submit_button( __( 'Save Settings', 'opti-analytics' ) ); ?>
 			</form>
@@ -436,71 +420,89 @@ class Settings {
 
 		<script>
 			document.addEventListener('DOMContentLoaded', function() {
+				/* ── Click-to-add meta tags ── */
 				function setupAddButtons(inputId, btnClass) {
 					var input = document.getElementById(inputId);
 					if (!input) return;
-					var buttons = document.querySelectorAll('.' + btnClass);
-
-					buttons.forEach(function(btn) {
+					document.querySelectorAll('.' + btnClass).forEach(function(btn) {
 						btn.addEventListener('click', function(e) {
 							e.preventDefault();
 							var key = this.getAttribute('data-key');
-
-							var current = input.value.split(',').map(function(item) {
-								return item.trim();
-							}).filter(function(item) {
-								return item !== '';
-							});
-
+							var current = input.value.split(',').map(function(i){ return i.trim(); }).filter(Boolean);
 							if (current.indexOf(key) === -1) {
 								current.push(key);
 								input.value = current.join(', ');
-								this.style.background = '#d1e5db';
-								this.style.borderColor = '#9abda9';
+								this.classList.add('added');
 							}
 						});
 					});
 				}
 
-				setupAddButtons('revenue_order_fields_input', 'opti-add-rev-order-btn');
-				setupAddButtons('revenue_product_fields_input', 'opti-add-rev-product-btn');
-				setupAddButtons('cost_order_fields_input', 'opti-add-cost-order-btn');
-				setupAddButtons('cost_product_fields_input', 'opti-add-cost-product-btn');
+				setupAddButtons('revenue_order_fields_input', 'opti-rev-order');
+				setupAddButtons('revenue_product_fields_input', 'opti-rev-prod');
+				setupAddButtons('cost_order_fields_input', 'opti-cost-order');
+				setupAddButtons('cost_product_fields_input', 'opti-cost-prod');
+				setupAddButtons('vo_order_fields_input', 'opti-vo-order');
+				setupAddButtons('vo_product_fields_input', 'opti-vo-prod');
+
+				/* ── Collapsible discovery panels ── */
+				document.querySelectorAll('.opti-discovery-toggle').forEach(function(btn) {
+					btn.addEventListener('click', function() {
+						var panel = this.nextElementSibling;
+						this.classList.toggle('open');
+						panel.classList.toggle('open');
+					});
+				});
 			});
 		</script>
 		<?php
 	}
 
 	/**
-	 * Renders the "click to add" discovery buttons for a list of meta keys.
+	 * Renders a meta field row with input + collapsible discovery panel.
 	 *
-	 * @param array<string, string>|array<string> $keys      The available meta keys.
-	 * @param string                              $btn_class CSS class for the buttons.
-	 * @param bool                                $show_source Whether to show the source label (HPOS/Legacy).
+	 * @param string $input_id    HTML id for the input.
+	 * @param string $option_name The WP option name.
+	 * @param string $value       Current saved value.
+	 * @param string $label       Field label.
+	 * @param string $desc        Field description.
+	 * @param string $placeholder Placeholder text.
+	 * @param array  $keys        Discovered meta keys.
+	 * @param string $btn_class   CSS class for click-to-add buttons.
+	 * @param bool   $show_source Whether to show HPOS/Legacy source tag.
 	 */
-	private function render_click_to_add_buttons( array $keys, string $btn_class, bool $show_source ): void {
-		if ( empty( $keys ) ) {
-			return;
-		}
+	private function render_meta_field_row( string $input_id, string $option_name, string $value, string $label, string $desc, string $placeholder, array $keys, string $btn_class, bool $show_source ): void {
 		?>
-		<div style="margin-top: 15px; background: #fff; padding: 15px; border: 1px solid #ccd0d4; border-radius: 4px;">
-			<p style="margin: 0 0 10px 0; font-weight: 600;">
-				<?php esc_html_e( 'Discovered fields (click to add):', 'opti-analytics' ); ?>
-			</p>
-			<?php
-			foreach ( $keys as $key => $source ) :
-				// For product meta, $key is numeric and $source is the meta key.
-				$meta_key = $show_source ? $key : $source;
-				?>
-				<a href="#" class="<?php echo esc_attr( $btn_class ); ?>"
-					data-key="<?php echo esc_attr( $meta_key ); ?>"
-					style="display: inline-block; padding: 4px 8px; background: #f0f0f1; border: 1px solid #c3c4c7; border-radius: 3px; text-decoration: none; color: #50575e; margin: 0 5px 5px 0; font-size: 12px; transition: background 0.2s;">
-					+ <?php echo esc_html( $meta_key ); ?>
-					<?php if ( $show_source ) : ?>
-						<span style="font-size: 10px; color: #999; margin-left: 2px;">(<?php echo esc_html( $source ); ?>)</span>
-					<?php endif; ?>
-				</a>
-			<?php endforeach; ?>
+		<div class="opti-field-row">
+			<label for="<?php echo esc_attr( $input_id ); ?>"><?php echo esc_html( $label ); ?></label>
+			<input type="text" id="<?php echo esc_attr( $input_id ); ?>"
+				name="<?php echo esc_attr( $option_name ); ?>"
+				value="<?php echo esc_attr( $value ); ?>"
+				class="regular-text"
+				placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+			<p class="description"><?php echo esc_html( $desc ); ?></p>
+
+			<?php if ( ! empty( $keys ) ) : ?>
+				<button type="button" class="opti-discovery-toggle">
+					<span class="dashicons dashicons-search"></span>
+					<?php esc_html_e( 'Browse discovered fields', 'opti-analytics' ); ?>
+					<span class="dashicons dashicons-arrow-down-alt2"></span>
+				</button>
+				<div class="opti-discovery-panel">
+					<?php
+					foreach ( $keys as $key => $source ) :
+						$meta_key = $show_source ? $key : $source;
+						?>
+						<a href="#" class="opti-meta-tag <?php echo esc_attr( $btn_class ); ?>"
+							data-key="<?php echo esc_attr( $meta_key ); ?>">
+							+ <?php echo esc_html( $meta_key ); ?>
+							<?php if ( $show_source ) : ?>
+								<span class="opti-tag-source">(<?php echo esc_html( $source ); ?>)</span>
+							<?php endif; ?>
+						</a>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

@@ -216,3 +216,130 @@ input:checked + .opti-slider:before {
 	color: #50575e;
 	cursor: pointer;
 }
+
+/* ── Settings Page Cards ────────────────────────────── */
+.opti-settings-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin-bottom: 20px;
+	box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+.opti-settings-card-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 20px;
+	border-bottom: 1px solid #c3c4c7;
+	background: #f6f7f7;
+}
+.opti-settings-card-header .dashicons {
+	font-size: 20px;
+	width: 20px;
+	height: 20px;
+	color: #2271b1;
+}
+.opti-settings-card-header h2 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: #1d2327;
+}
+.opti-settings-card-header p {
+	margin: 0 0 0 auto;
+	font-size: 12px;
+	color: #646970;
+}
+.opti-settings-card-body {
+	padding: 20px;
+}
+.opti-settings-card-body .form-table th {
+	width: 200px;
+	padding: 12px 10px 12px 0;
+}
+.opti-settings-card-body .form-table td {
+	padding: 12px 10px;
+}
+.opti-field-row {
+	margin-bottom: 16px;
+}
+.opti-field-row:last-child {
+	margin-bottom: 0;
+}
+.opti-field-row label {
+	font-weight: 600;
+	display: block;
+	margin-bottom: 6px;
+	font-size: 13px;
+	color: #1d2327;
+}
+.opti-field-row .description {
+	margin-top: 4px;
+}
+
+/* Discovery panel (collapsible) */
+.opti-discovery-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 10px;
+	padding: 4px 10px;
+	font-size: 12px;
+	color: #2271b1;
+	background: none;
+	border: 1px solid #2271b1;
+	border-radius: 3px;
+	cursor: pointer;
+	transition: background .15s;
+}
+.opti-discovery-toggle:hover {
+	background: #f0f6fc;
+}
+.opti-discovery-toggle .dashicons {
+	font-size: 14px;
+	width: 14px;
+	height: 14px;
+	transition: transform .2s;
+}
+.opti-discovery-toggle.open .dashicons {
+	transform: rotate(180deg);
+}
+.opti-discovery-panel {
+	display: none;
+	margin-top: 10px;
+	background: #f9f9f9;
+	padding: 12px;
+	border: 1px solid #e0e0e0;
+	border-radius: 4px;
+	max-height: 200px;
+	overflow-y: auto;
+}
+.opti-discovery-panel.open {
+	display: block;
+}
+.opti-meta-tag {
+	display: inline-block;
+	padding: 3px 8px;
+	background: #f0f0f1;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	text-decoration: none;
+	color: #50575e;
+	margin: 0 4px 4px 0;
+	font-size: 12px;
+	cursor: pointer;
+	transition: background .15s, border-color .15s;
+}
+.opti-meta-tag:hover {
+	background: #e8e8e8;
+	color: #50575e;
+}
+.opti-meta-tag.added {
+	background: #d1e5db;
+	border-color: #9abda9;
+}
+.opti-meta-tag .opti-tag-source {
+	font-size: 10px;
+	color: #999;
+	margin-left: 2px;
+}

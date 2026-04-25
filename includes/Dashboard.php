@@ -376,6 +376,31 @@ class Dashboard {
 			}
 		}
 
+		// Add View Only fields (dashboard display, no P&L impact).
+		$vo_groups = array(
+			array(
+				'fields' => Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS ),
+				'desc'   => __( 'View only — order-level (summed per order)', 'opti-analytics' ),
+			),
+			array(
+				'fields' => Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS ),
+				'desc'   => __( 'View only — line item (value × qty)', 'opti-analytics' ),
+			),
+		);
+
+		foreach ( $vo_groups as $group ) {
+			foreach ( $group['fields'] as $field ) {
+				if ( isset( $metrics[ $field ] ) ) {
+					$kpis[ $field ] = array(
+						'label'   => Data_Engine::get_custom_field_label( $field ),
+						'value'   => wp_kses_post( wc_price( $metrics[ $field ] ) ),
+						'desc'    => $group['desc'],
+						'default' => true,
+					);
+				}
+			}
+		}
+
 		// ── P&L KPI cards ───────────────────────────────────────────
 		$profit_color = $metrics['net_profit'] >= 0 ? '#16a34a' : '#dc2626';
 		$gross_color  = $metrics['gross_profit'] >= 0 ? '#16a34a' : '#dc2626';

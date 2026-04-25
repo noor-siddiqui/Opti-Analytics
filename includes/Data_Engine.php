@@ -83,6 +83,8 @@ class Data_Engine {
 		$revenue_product_fields = Settings::parse_csv_option( Settings::PNL_REVENUE_PRODUCT_FIELDS );
 		$cost_order_fields      = Settings::parse_csv_option( Settings::PNL_COST_ORDER_FIELDS );
 		$cost_product_fields    = Settings::parse_csv_option( Settings::PNL_COST_PRODUCT_FIELDS );
+		$vo_order_fields        = Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS );
+		$vo_product_fields      = Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS );
 
 		if ( ! is_array( $revenue_builtins ) ) {
 			$revenue_builtins = array();
@@ -92,10 +94,10 @@ class Data_Engine {
 		}
 
 		// Merge all custom order-level fields (for aggregation in the loop).
-		$all_order_fields = array_unique( array_merge( $revenue_order_fields, $cost_order_fields ) );
+		$all_order_fields = array_unique( array_merge( $revenue_order_fields, $cost_order_fields, $vo_order_fields ) );
 
 		// Merge all custom line-item-level fields.
-		$all_product_fields = array_unique( array_merge( $revenue_product_fields, $cost_product_fields ) );
+		$all_product_fields = array_unique( array_merge( $revenue_product_fields, $cost_product_fields, $vo_product_fields ) );
 
 		// Initialize metrics for every custom field.
 		foreach ( $all_order_fields as $field ) {
