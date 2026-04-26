@@ -10,7 +10,7 @@
  * GitHub Plugin URI: https://github.com/noor-siddiqui/Opti-Analytics
  * Text Domain:       opti-analytics
  * Domain Path:       /languages
- * 
+ *
  * @package OptiAnalytics
  * @author  Noor Nabiul Alam Siddiqui <siddiqui.sazal@gmail.com>
  * @license https://github.com/noor-siddiqui/Opti-Analytics?tab=GPL-3.0-1-ov-file GNU General Public License v3.0
