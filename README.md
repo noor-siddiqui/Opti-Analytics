@@ -6,6 +6,8 @@
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
   <a href="https://woocommerce.com/"><img src="https://img.shields.io/badge/WooCommerce-%3E%3D_8.0-orange.svg" alt="WooCommerce"></a>
   <a href="https://php.net/"><img src="https://img.shields.io/badge/PHP-%3E%3D_8.1-777bb4.svg" alt="PHP"></a>
+  <a href="https://github.com/noor-siddiqui/Opti-Analytics/actions/workflows/phpcs.yml"><img src="https://github.com/noor-siddiqui/Opti-Analytics/actions/workflows/phpcs.yml/badge.svg" alt="WordPress Coding Standards (WPCS)"></a>
+  <a href="https://github.com/noor-siddiqui/Opti-Analytics/actions/workflows/release.yml"><img src="https://github.com/noor-siddiqui/Opti-Analytics/actions/workflows/release.yml/badge.svg" alt="Build and Package Plugin Release"></a>
 </p>
 
 **Opti Analytics** is a high-performance sales analytics and financial reporting plugin for WooCommerce. It empowers store owners with deep insights into their profitability by integrating custom data points, tracking actual costs, and providing a dynamic, customizable dashboard.
