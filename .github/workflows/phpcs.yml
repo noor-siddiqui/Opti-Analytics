@@ -14,18 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      # Step A: Get our code from the repository
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Step B: Set up PHP
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
-          coverage: none
-          tools: composer
+          coverage: none # We disable coverage to speed up the action
 
-      - name: Install Dependencies
+      # Step C: Install Composer Dependencies (INCLUDING dev tools)
+      # Notice we do NOT use --no-dev here, because we need PHPCS to be installed!
+      - name: Install Composer Dependencies
         run: composer install --prefer-dist --no-progress
 
-      - name: Run PHP CodeSniffer
-        run: vendor/bin/phpcs -n
+      # Step D: Run the Sniffer!
+      # It will automatically find your phpcs.xml.dist file in the root folder.
+      - name: Run PHPCS
+        run: vendor/bin/phpcs
