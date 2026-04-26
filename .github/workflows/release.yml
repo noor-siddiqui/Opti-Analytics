@@ -42,11 +42,11 @@ jobs:
 
       # Step E: Zip the clean folder
       - name: Zip Plugin
-        run: zip -r opti-analytics.zip opti-analytics/
+        run: zip -r opti-analytics.zip opti-analytics
 
       # Step F: Upload the ZIP to the GitHub Release page
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           files: opti-analytics.zip
         env:
