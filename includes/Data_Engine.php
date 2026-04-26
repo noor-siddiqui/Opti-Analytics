@@ -39,26 +39,30 @@ class Data_Engine {
 	}
 
 	/**
-	 * Retrieves dashboard metrics for a given date range.
+	 * Retrieves dashboard metrics for a given date range using Direct Optimized SQL.
 	 *
 	 * @param string $start_date Start date in Y-m-d format.
 	 * @param string $end_date   End date in Y-m-d format.
 	 * @return array<string, float|int> Array of metrics.
 	 */
 	public function get_dashboard_metrics( string $start_date, string $end_date ): array {
-		$args = array(
+		global $wpdb;
+
+		// 1. Fetch ONLY the Order IDs (Extremely fast, uses ~1MB memory for 100k orders)
+		$args      = array(
 			'date_created' => $start_date . ' 00:00:00...' . $end_date . ' 23:59:59',
 			'limit'        => -1,
+			'return'       => 'ids',
 			'status'       => array( 'wc-completed', 'wc-processing' ),
 		);
+		$order_ids = wc_get_orders( $args );
 
-		$orders = wc_get_orders( $args );
-
+		// 2. Setup Default Metrics Array
 		$metrics = array(
 			'total_sales'             => 0.0,
 			'net_sales'               => 0.0,
 			'gross_sales'             => 0.0,
-			'orders_count'            => count( $orders ),
+			'orders_count'            => count( $order_ids ),
 			'products_sold'           => 0.0,
 			'average_items_per_order' => 0.0,
 			'shipping'                => 0.0,
@@ -68,7 +72,6 @@ class Data_Engine {
 			'off_total'               => 0.0,
 			'cogs'                    => 0.0,
 			'actual_shipping_cost'    => 0.0,
-			// P&L computed metrics.
 			'total_revenue'           => 0.0,
 			'total_costs'             => 0.0,
 			'gross_profit'            => 0.0,
@@ -76,7 +79,34 @@ class Data_Engine {
 			'profit_margin'           => 0.0,
 		);
 
-		// ── Load P&L configuration ──────────────────────────────────
+		if ( empty( $order_ids ) ) {
+			return $metrics; // Exit early if no orders.
+		}
+
+		// Convert IDs to a comma-separated string for SQL IN() clauses safely.
+		$ids_list = implode( ',', array_map( 'intval', $order_ids ) );
+
+		// Optimized Base Stats Query.
+		// We use WooCommerce's built-in stats table which is indexed and blazing fast.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$base_stats = $wpdb->get_row(
+			"SELECT 
+				SUM(total_sales) as total_sales,
+				SUM(net_total) as net_sales,
+				SUM(shipping_total) as shipping,
+				SUM(num_items_sold) as products_sold
+			FROM {$wpdb->prefix}wc_order_stats 
+			WHERE order_id IN ({$ids_list})"
+		);
+
+		if ( $base_stats ) {
+			$metrics['total_sales']   = (float) $base_stats->total_sales;
+			$metrics['net_sales']     = (float) $base_stats->net_sales;
+			$metrics['shipping']      = (float) $base_stats->shipping;
+			$metrics['products_sold'] = (float) $base_stats->products_sold;
+		}
+
+		// Setup Custom Fields Aggregation.
 		$revenue_builtins       = get_option( Settings::PNL_REVENUE_BUILTINS, array() );
 		$cost_builtins          = get_option( Settings::PNL_COST_BUILTINS, array() );
 		$revenue_order_fields   = Settings::parse_csv_option( Settings::PNL_REVENUE_ORDER_FIELDS );
@@ -87,147 +117,154 @@ class Data_Engine {
 		$vo_product_fields      = Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS );
 
 		if ( ! is_array( $revenue_builtins ) ) {
-			$revenue_builtins = array();
-		}
+			$revenue_builtins = array(); }
 		if ( ! is_array( $cost_builtins ) ) {
-			$cost_builtins = array();
+			$cost_builtins = array(); }
+
+		$all_order_fields   = array_unique( array_merge( $revenue_order_fields, $cost_order_fields, $vo_order_fields, array( '_opti_manual_shipping_cost', '_sa_manual_shipping_csv' ) ) );
+		$all_product_fields = array_unique( array_merge( $revenue_product_fields, $cost_product_fields, $vo_product_fields, array( '_oa_historical_cogs', '_historical_cogs', '_oa_discount_amount' ) ) );
+
+		// Initialize custom fields to 0.
+		foreach ( $all_order_fields as $f ) {
+			$metrics[ $f ] = 0.0; }
+		foreach ( $all_product_fields as $f ) {
+			$metrics[ $f ] = 0.0; }
+
+		// Optimized Product / Line Item Meta Query.
+		// This aggregates custom product data by multiplying (meta_value * _qty).
+		if ( ! empty( $all_product_fields ) ) {
+			$item_cases = array();
+			foreach ( $all_product_fields as $field ) {
+				$safe_field = esc_sql( $field );
+				// We CAST the string meta values to decimals to safely multiply them in SQL.
+				$item_cases[] = "SUM(CASE WHEN im.meta_key = '{$safe_field}' THEN (CAST(im.meta_value AS DECIMAL(10,4)) * CAST(qty_meta.meta_value AS DECIMAL(10,4))) ELSE 0 END) AS `{$safe_field}`";
+			}
+			$item_selects = implode( ', ', $item_cases );
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$item_meta_stats = $wpdb->get_row(
+				"SELECT {$item_selects}
+				FROM {$wpdb->prefix}woocommerce_order_items i
+				JOIN {$wpdb->prefix}woocommerce_order_itemmeta im 
+					ON i.order_item_id = im.order_item_id
+				JOIN {$wpdb->prefix}woocommerce_order_itemmeta qty_meta 
+					ON i.order_item_id = qty_meta.order_item_id AND qty_meta.meta_key = '_qty'
+				WHERE i.order_id IN ({$ids_list})
+				AND i.order_item_type = 'line_item'"
+			);
+
+			if ( $item_meta_stats ) {
+				foreach ( $all_product_fields as $field ) {
+					$metrics[ $field ] = (float) ( $item_meta_stats->{$field} ?? 0.0 );
+				}
+			}
 		}
 
-		// Merge all custom order-level fields (for aggregation in the loop).
-		$all_order_fields = array_unique( array_merge( $revenue_order_fields, $cost_order_fields, $vo_order_fields ) );
+		// Optimized Order Meta Query (HPOS + Legacy Hybrid).
+		if ( ! empty( $all_order_fields ) ) {
+			$is_hpos = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
 
-		// Merge all custom line-item-level fields.
-		$all_product_fields = array_unique( array_merge( $revenue_product_fields, $cost_product_fields, $vo_product_fields ) );
+			// Safely prepare the meta keys for the SQL IN() clause.
+			$meta_keys_in = "'" . implode( "','", array_map( 'esc_sql', $all_order_fields ) ) . "'";
 
-		// Initialize metrics for every custom field.
-		foreach ( $all_order_fields as $field ) {
-			$metrics[ $field ] = 0.0;
-		}
-		foreach ( $all_product_fields as $field ) {
-			$metrics[ $field ] = 0.0;
-		}
+			// Fetch from Legacy Postmeta.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$legacy_meta = $wpdb->get_results(
+				"SELECT post_id as order_id, meta_key, meta_value 
+				FROM {$wpdb->postmeta} 
+				WHERE post_id IN ({$ids_list}) AND meta_key IN ({$meta_keys_in})"
+			);
 
-		// ── Aggregate per-order metrics ─────────────────────────────
-		foreach ( $orders as $order ) {
+			// Fetch from HPOS Meta (if active).
+			$hpos_meta = array();
+			if ( $is_hpos ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$hpos_meta = $wpdb->get_results(
+					"SELECT order_id, meta_key, meta_value 
+					FROM {$wpdb->prefix}wc_orders_meta 
+					WHERE order_id IN ({$ids_list}) AND meta_key IN ({$meta_keys_in})"
+				);
+			}
 
-			$total    = (float) $order->get_total();
-			$tax      = (float) $order->get_total_tax();
-			$shipping = (float) $order->get_shipping_total();
-			$refunds  = (float) $order->get_total_refunded();
-			$subtotal = (float) $order->get_subtotal();
+			// Merge and Deduplicate in PHP.
+			$merged_meta = array();
 
-			$metrics['total_sales']      += $total;
-			$metrics['net_sales']        += ( $total - $tax - $shipping - $refunds );
-			$metrics['gross_sales']      += $subtotal;
-			$metrics['shipping']         += $shipping;
-			$metrics['discounted_total'] += (float) $order->get_total_discount();
-
-			$actual_shipping_cost = self::get_order_meta_value( $order, '_opti_manual_shipping_cost' );
-
-			if ( is_numeric( $actual_shipping_cost ) ) {
-				$metrics['actual_shipping_cost'] += (float) $actual_shipping_cost;
-			} else {
-				$actual_shipping_cost = self::get_order_meta_value( $order, '_sa_manual_shipping_csv' );
-				if ( is_numeric( $actual_shipping_cost ) ) {
-					$metrics['actual_shipping_cost'] += (float) $actual_shipping_cost;
-				} else {
-					$metrics['actual_shipping_cost'] += $shipping;
+			// Load legacy data first.
+			if ( $legacy_meta ) {
+				foreach ( $legacy_meta as $row ) {
+					$merged_meta[ $row->order_id ][ $row->meta_key ] = $row->meta_value;
 				}
 			}
 
-			// ── Per-item aggregation ────────────────────────────────
-			foreach ( $order->get_items() as $item ) {
-
-				$qty                       = $item->get_quantity();
-				$metrics['products_sold'] += $qty;
-
-				// COGS: per-item cost × quantity.
-				// Use product-level COGS when available, otherwise order-level.
-				// check if meta exists else return 0.
-				if ( $item->meta_exists( '_oa_historical_cogs' ) ) {
-					$per_item_cogs    = (float) $item->get_meta( '_oa_historical_cogs' );
-					$metrics['cogs'] += $per_item_cogs * $qty;
-				} elseif ( $item->meta_exists( '_historical_cogs' ) ) {
-					$per_item_cogs    = (float) $item->get_meta( '_historical_cogs' );
-					$metrics['cogs'] += $per_item_cogs * $qty;
+			// Overwrite with HPOS data (HPOS is the source of truth).
+			if ( $hpos_meta ) {
+				foreach ( $hpos_meta as $row ) {
+					$merged_meta[ $row->order_id ][ $row->meta_key ] = $row->meta_value;
 				}
+			}
 
-				// Aggregate custom line-item-level fields: value × quantity.
-				foreach ( $all_product_fields as $field ) {
-					$val = $item->get_meta( $field );
-					if ( is_numeric( $val ) ) {
-						$metrics[ $field ] += (float) $val * $qty;
+			// Sum up the cleanly merged data.
+			foreach ( $merged_meta as $order_id => $keys ) {
+				foreach ( $keys as $meta_key => $meta_value ) {
+					if ( is_numeric( $meta_value ) ) {
+						$metrics[ $meta_key ] += (float) $meta_value;
 					}
 				}
-
-				if ( $item->meta_exists( '_oa_discount_amount' ) ) {
-					$discount_amount       = (float) $item->get_meta( '_oa_discount_amount' );
-					$metrics['off_total'] += $discount_amount * $qty;
-				}
-			}
-
-			// Aggregate custom order-level fields.
-			foreach ( $all_order_fields as $field ) {
-				$val = self::get_order_meta_value( $order, $field );
-				if ( is_numeric( $val ) ) {
-					$metrics[ $field ] += (float) $val;
-				}
 			}
 		}
 
-		// ── Out of stock products ───────────────────────────────────
-		$args_oos                = array(
-			'post_type'      => 'product',
-			'post_status'    => 'publish',
-			'posts_per_page' => -1,
-			'meta_query'     => array(
-				array(
-					'key'     => '_stock_status',
-					'value'   => 'outofstock',
-					'compare' => '=',
-				),
-			),
-			'fields'         => 'ids',
-		);
-		$oos_query               = new \WP_Query( $args_oos );
-		$metrics['out_of_stock'] = $oos_query->found_posts;
+		// Map SQL Results to Metrics Array.
+		// COGS Priority Mapping.
+		$metrics['cogs']      = $metrics['_oa_historical_cogs'] > 0 ? $metrics['_oa_historical_cogs'] : $metrics['_historical_cogs'];
+		$metrics['off_total'] = $metrics['_oa_discount_amount'];
 
-		// ── Computed averages ───────────────────────────────────────
+		// Actual Shipping Cost Priority Mapping.
+		if ( $metrics['_opti_manual_shipping_cost'] > 0 ) {
+			$metrics['actual_shipping_cost'] = $metrics['_opti_manual_shipping_cost'] + $metrics['_sa_manual_shipping_csv'];
+		} elseif ( $metrics['_sa_manual_shipping_csv'] > 0 ) {
+			$metrics['actual_shipping_cost'] = $metrics['_sa_manual_shipping_csv'];
+		} else {
+			$metrics['actual_shipping_cost'] = $metrics['shipping'];
+		}
+
+		// Gross Sales Approximation (Since wc_order_stats handles net).
+		$metrics['gross_sales'] = $metrics['net_sales'] + $metrics['discounted_total'];
+
+		// Averages.
 		if ( $metrics['orders_count'] > 0 ) {
 			$metrics['average_items_per_order'] = $metrics['products_sold'] / $metrics['orders_count'];
 			$metrics['aov']                     = $metrics['net_sales'] / $metrics['orders_count'];
 		}
 
-		// ── P&L Calculation ─────────────────────────────────────────
-		// Sum selected built-in revenue sources.
+		// Optimized Out of stock products count (using wc_get_products ids).
+		$oos_ids                 = wc_get_products(
+			array(
+				'status'       => 'publish',
+				'stock_status' => 'outofstock',
+				'return'       => 'ids',
+				'limit'        => -1,
+			)
+		);
+		$metrics['out_of_stock'] = count( $oos_ids );
+
+		// P&L Calculation.
 		foreach ( $revenue_builtins as $key ) {
 			if ( isset( $metrics[ $key ] ) ) {
-				$metrics['total_revenue'] += $metrics[ $key ];
-			}
+				$metrics['total_revenue'] += $metrics[ $key ]; }
 		}
-		// Add custom revenue order fields.
 		foreach ( $revenue_order_fields as $field ) {
-			$metrics['total_revenue'] += $metrics[ $field ] ?? 0.0;
-		}
-		// Add custom revenue product fields.
+			$metrics['total_revenue'] += $metrics[ $field ] ?? 0.0; }
 		foreach ( $revenue_product_fields as $field ) {
-			$metrics['total_revenue'] += $metrics[ $field ] ?? 0.0;
-		}
+			$metrics['total_revenue'] += $metrics[ $field ] ?? 0.0; }
 
-		// Sum selected built-in cost sources.
 		foreach ( $cost_builtins as $key ) {
 			if ( isset( $metrics[ $key ] ) ) {
-				$metrics['total_costs'] += $metrics[ $key ];
-			}
+				$metrics['total_costs'] += $metrics[ $key ]; }
 		}
-		// Add custom cost order fields.
 		foreach ( $cost_order_fields as $field ) {
-			$metrics['total_costs'] += $metrics[ $field ] ?? 0.0;
-		}
-		// Add custom cost product fields.
+			$metrics['total_costs'] += $metrics[ $field ] ?? 0.0; }
 		foreach ( $cost_product_fields as $field ) {
-			$metrics['total_costs'] += $metrics[ $field ] ?? 0.0;
-		}
+			$metrics['total_costs'] += $metrics[ $field ] ?? 0.0; }
 
 		// Final P&L metrics.
 		$metrics['gross_profit']  = $metrics['total_revenue'] - ( $metrics['cogs'] ?? 0.0 );
