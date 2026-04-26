@@ -11,6 +11,8 @@ jobs:
   build:
     name: Build ZIP file
     runs-on: ubuntu-latest # The temporary server environment
+    permissions:
+      contents: write # Needed to upload files to GitHub Releases
 
     steps:
       # Step A: Get our code from the repository
@@ -46,7 +48,7 @@ jobs:
 
       # Step F: Upload the ZIP to the GitHub Release page
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: opti-analytics.zip
         env:
