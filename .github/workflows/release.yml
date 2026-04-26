@@ -38,7 +38,7 @@ jobs:
                    --exclude='phpcs.xml.dist' \
                    --exclude='composer.json' \
                    --exclude='composer.lock' \
-                   ./ opti-analytics/
+                   . opti-analytics/
 
       # Step E: Zip the clean folder
       - name: Zip Plugin
