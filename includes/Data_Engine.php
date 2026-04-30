@@ -237,15 +237,16 @@ class Data_Engine {
 		}
 
 		// Optimized Out of stock products count (using wc_get_products ids).
-		$oos_ids                 = wc_get_products(
+		$oos_query               = wc_get_products(
 			array(
 				'status'       => 'publish',
 				'stock_status' => 'outofstock',
 				'return'       => 'ids',
-				'limit'        => -1,
+				'limit'        => 1,
+				'paginate'     => true,
 			)
 		);
-		$metrics['out_of_stock'] = count( $oos_ids );
+		$metrics['out_of_stock'] = $oos_query->total;
 
 		// P&L Calculation.
 		foreach ( $revenue_builtins as $key ) {
