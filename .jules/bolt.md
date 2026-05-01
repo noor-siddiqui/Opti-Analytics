@@ -1,0 +1,3 @@
+## 2024-05-01 - Avoid Limit -1 for WooCommerce Product Counts
+**Learning:** Using `wc_get_products` with `limit => -1` to count products can cause unbounded memory usage on stores with large catalogs, since it loads all IDs into memory.
+**Action:** Always use `wc_get_products` with `paginate => true` and `limit => 1` (or another small number) when you only need a count. The returned object will have a `total` property containing the full count without allocating memory for all items.
