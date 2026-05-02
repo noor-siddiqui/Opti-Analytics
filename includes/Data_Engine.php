@@ -236,16 +236,17 @@ class Data_Engine {
 			$metrics['aov']                     = $metrics['net_sales'] / $metrics['orders_count'];
 		}
 
-		// Optimized Out of stock products count (using wc_get_products ids).
-		$oos_ids                 = wc_get_products(
+		// ⚡ Bolt: Optimized Out of stock products count.
+		// Uses pagination to avoid loading all product IDs into memory at once.
+		$oos_query               = wc_get_products(
 			array(
 				'status'       => 'publish',
 				'stock_status' => 'outofstock',
-				'return'       => 'ids',
-				'limit'        => -1,
+				'paginate'     => true,
+				'limit'        => 1,
 			)
 		);
-		$metrics['out_of_stock'] = count( $oos_ids );
+		$metrics['out_of_stock'] = $oos_query->total;
 
 		// P&L Calculation.
 		foreach ( $revenue_builtins as $key ) {

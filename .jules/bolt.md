@@ -1,0 +1,3 @@
+## 2024-05-24 - Optimize WooCommerce Product Count
+**Learning:** Using `limit => -1` in `wc_get_products()` to count products causes WooCommerce to load all matching product IDs into memory. While using `return => ids` is better than loading full objects, it still has unbounded memory usage scaling linearly with the store size.
+**Action:** When only needing a count of products in WooCommerce, always use `paginate => true` with `limit => 1` and read the `total` property of the returned object. This pushes the aggregation to the database (using `SQL_CALC_FOUND_ROWS` or similar) and guarantees low, constant memory usage.
