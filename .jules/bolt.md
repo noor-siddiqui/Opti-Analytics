@@ -1,0 +1,3 @@
+## 2024-05-04 - [Optimize out-of-stock product counting]
+**Learning:** Using `wc_get_products` with `limit => -1` can lead to Out Of Memory issues on stores with a very large number of products, as it attempts to load all IDs into memory just to get a count.
+**Action:** When counting WooCommerce products, always use `paginate => true` and a small `limit` (like 1), then read the `->total` property from the result instead of counting an array.
