@@ -113,108 +113,193 @@
 	color: #999;
 }
 
-/* Stats dropdown */
-.opti-stats-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 15px;
+/* ═══════════ NEW PERFORMANCE BLOCKS STYLES ═══════════ */
+.opti-performance-blocks {
+	margin-top: 20px;
 }
-.opti-stats-header .opti-section-title {
-	margin-bottom: 0;
+
+.opti-metric-block {
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	margin-bottom: 24px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	overflow: hidden;
+	transition: border-color 0.25s ease, background-color 0.25s ease;
 }
-.opti-dropdown-wrap {
-	position: relative;
+
+.opti-metric-block-header {
+	padding: 14px 20px;
+	border-bottom: 1px solid #f3f4f6;
+	background: #fcfdfd;
 }
-.opti-dropdown-toggle {
-	background: none;
-	border: none;
-	cursor: pointer;
-	font-size: 20px;
-	color: #787c82;
-	padding: 5px;
-	line-height: 1;
+
+.opti-metric-block-header h3 {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: #1f2937;
+	line-height: 1.4;
 }
-.opti-dropdown-toggle:hover {
-	color: #2271b1;
+
+.opti-metric-block-grid {
+	display: grid;
+	background: #ffffff;
 }
-.opti-dropdown-menu {
-	display: none;
-	position: absolute;
-	right: 0;
-	top: 100%;
-	background: #fff;
-	border: 1px solid #ccd0d4;
-	box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-	border-radius: 4px;
-	padding: 10px;
-	min-width: 220px;
-	z-index: 100;
-	max-height: 400px;
-	overflow-y: auto;
+
+.opti-row-divider {
+	border-bottom: 1px solid #e5e7eb;
 }
-.opti-dropdown-menu.active {
-	display: block;
+
+.opti-metric-block-grid .kpi-cell {
+	border-bottom: none;
+	border-right: 1px solid #e5e7eb;
 }
-.opti-dropdown-menu-title {
-	font-size: 13px;
-	color: #646970;
-	margin-bottom: 10px;
+
+.opti-metric-block-grid .kpi-cell:last-child {
+	border-right: none;
 }
-.opti-toggle-item {
-	display: flex;
-	align-items: center;
-	margin-bottom: 8px;
+
+/* Grid columns templates */
+.grid-5-col {
+	grid-template-columns: repeat(5, 1fr);
 }
-.opti-toggle-item:last-child {
-	margin-bottom: 0;
+
+.grid-4-col {
+	grid-template-columns: repeat(4, 1fr);
 }
-/* Toggle Switch CSS */
-.opti-switch {
-	position: relative;
-	display: inline-block;
-	width: 34px;
-	height: 18px;
-	margin-right: 10px;
-	flex-shrink: 0;
+
+.grid-3-col {
+	grid-template-columns: repeat(3, 1fr);
 }
-.opti-switch input {
-	opacity: 0;
-	width: 0;
-	height: 0;
+
+.grid-2-col {
+	grid-template-columns: repeat(2, 1fr);
 }
-.opti-slider {
-	position: absolute;
-	cursor: pointer;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background-color: #ccc;
-	transition: .2s;
-	border-radius: 18px;
+
+.grid-1-col {
+	grid-template-columns: 1fr;
 }
-.opti-slider:before {
-	position: absolute;
-	content: "";
-	height: 14px;
-	width: 14px;
-	left: 2px;
-	bottom: 2px;
-	background-color: white;
-	transition: .2s;
-	border-radius: 50%;
+
+/* Responsive grid overrides */
+.grid-5-col .kpi-cell:nth-child(5n) {
+	border-right: none;
 }
-input:checked + .opti-slider {
-	background-color: #f08221;
+
+.grid-4-col .kpi-cell:nth-child(4n) {
+	border-right: none;
 }
-input:checked + .opti-slider:before {
-	transform: translateX(16px);
+
+.grid-3-col .kpi-cell:nth-child(3n) {
+	border-right: none;
 }
-.opti-toggle-label {
-	font-size: 13px;
-	color: #50575e;
-	cursor: pointer;
+
+.grid-2-col .kpi-cell:nth-child(2n) {
+	border-right: none;
+}
+
+.grid-1-col .kpi-cell {
+	border-right: none;
+}
+
+/* Custom Block Themes (Modern Mild Color Plates) */
+
+/* Green Theme (Sales & Orders) */
+.opti-metric-block.opti-theme-green {
+	border-color: #dcfce7;
+}
+.opti-metric-block.opti-theme-green .opti-metric-block-header {
+	background: #f0fdf4;
+	border-bottom-color: #dcfce7;
+}
+.opti-metric-block.opti-theme-green .opti-metric-block-header h3 {
+	color: #166534;
+}
+
+/* Blue Theme (Shipping & COGS) */
+.opti-metric-block.opti-theme-blue {
+	border-color: #dbeafe;
+}
+.opti-metric-block.opti-theme-blue .opti-metric-block-header {
+	background: #eff6ff;
+	border-bottom-color: #dbeafe;
+}
+.opti-metric-block.opti-theme-blue .opti-metric-block-header h3 {
+	color: #1e40af;
+}
+
+/* Purple Theme (Gateway & Fees) */
+.opti-metric-block.opti-theme-purple {
+	border-color: #f3e8ff;
+}
+.opti-metric-block.opti-theme-purple .opti-metric-block-header {
+	background: #faf5ff;
+	border-bottom-color: #f3e8ff;
+}
+.opti-metric-block.opti-theme-purple .opti-metric-block-header h3 {
+	color: #6b21a8;
+}
+
+/* Slate/Gray Theme (Inventory Status - default empty state) */
+.opti-metric-block.opti-theme-slate {
+	border-color: #e2e8f0;
+}
+.opti-metric-block.opti-theme-slate .opti-metric-block-header {
+	background: #f8fafc;
+	border-bottom-color: #e2e8f0;
+}
+.opti-metric-block.opti-theme-slate .opti-metric-block-header h3 {
+	color: #334155;
+}
+
+/* Amber Theme (Profit & Loss) */
+.opti-metric-block.opti-theme-amber {
+	border-color: #fef3c7;
+}
+.opti-metric-block.opti-theme-amber .opti-metric-block-header {
+	background: #fffbeb;
+	border-bottom-color: #fef3c7;
+}
+.opti-metric-block.opti-theme-amber .opti-metric-block-header h3 {
+	color: #b45309;
+}
+
+/* Out of Stock High Priority Alert styling (Overriding Slate Theme) */
+.opti-metric-block.opti-inventory-alert {
+	border-color: #fecaca !important;
+	background-color: #fdf2f2 !important;
+}
+
+.opti-metric-block.opti-inventory-alert .opti-metric-block-header {
+	border-bottom-color: #fee2e2 !important;
+	background: #fdf2f2 !important;
+}
+
+.opti-metric-block.opti-inventory-alert .opti-metric-block-header h3 {
+	color: #991b1b !important;
+}
+
+.opti-metric-block.opti-inventory-alert .opti-metric-block-grid {
+	background: transparent;
+}
+
+/* Mobile & Viewport Responsiveness */
+@media (max-width: 768px) {
+	.opti-metric-block-grid.grid-5-col,
+	.opti-metric-block-grid.grid-4-col,
+	.opti-metric-block-grid.grid-3-col,
+	.opti-metric-block-grid.grid-2-col {
+		grid-template-columns: 1fr !important;
+	}
+	
+	.opti-metric-block-grid .kpi-cell {
+		border-right: none !important;
+		border-bottom: 1px solid #e5e7eb !important;
+	}
+	
+	.opti-metric-block-grid .kpi-cell:last-child {
+		border-bottom: none !important;
+	}
 }
 
 /* ── Settings Page Cards ────────────────────────────── */
@@ -343,3 +428,33 @@ input:checked + .opti-slider:before {
 	color: #999;
 	margin-left: 2px;
 }
+
+/* Rearrange Mode Active Visual Cues */
+.opti-sortable-dashboard.rearrange-active .opti-dashboard-sort-item {
+	cursor: grab;
+	position: relative;
+	border: 1px dashed #2271b1 !important;
+	opacity: 0.85;
+	transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.opti-sortable-dashboard.rearrange-active .opti-dashboard-sort-item:hover {
+	opacity: 1;
+	box-shadow: 0 4px 12px rgba(34, 113, 177, 0.15);
+}
+.opti-sortable-dashboard.rearrange-active .opti-dashboard-sort-item.opti-dragging {
+	opacity: 0.4;
+	cursor: grabbing;
+	border-color: #646970 !important;
+	border-style: dotted !important;
+}
+.opti-drag-handle {
+	display: none;
+	cursor: grab;
+	color: #72777c;
+	margin-right: 8px;
+	vertical-align: middle;
+}
+.opti-sortable-dashboard.rearrange-active .opti-drag-handle {
+	display: inline-block;
+}
+

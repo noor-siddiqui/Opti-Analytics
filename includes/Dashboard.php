@@ -45,11 +45,192 @@ class Dashboard {
 	public function render_dashboard_page(): void {
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Opti Analytics', 'opti-analytics' ); ?></h1>
+			<h1 class="opti-dashboard-header">
+				<?php esc_html_e( 'Opti Analytics', 'opti-analytics' ); ?>
+				<button type="button" class="page-title-action opti-rearrange-btn" id="opti_rearrange_btn">
+					<span class="dashicons dashicons-move" style="font-size: 16px; vertical-align: middle; margin-top: -3px; margin-right: 4px;"></span><?php esc_html_e( 'Rearrange Layout', 'opti-analytics' ); ?>
+				</button>
+				<button type="button" class="button button-link opti-layout-cancel-btn" id="opti_layout_cancel_btn" style="display: none; margin-left: 10px; line-height: 2.15384615; vertical-align: middle;">
+					<?php esc_html_e( 'Cancel', 'opti-analytics' ); ?>
+				</button>
+				<button type="button" class="button button-link opti-layout-reset-btn" id="opti_layout_reset_btn" style="display: none; margin-left: 10px; line-height: 2.15384615; vertical-align: middle; color: #dc2626;">
+					<?php esc_html_e( 'Reset Order', 'opti-analytics' ); ?>
+				</button>
+			</h1>
 			<div class="opti-analytics-tab-content">
 				<?php $this->render_dashboard_tab(); ?>
 			</div>
 		</div>
+
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+				var container = document.getElementById('opti_sortable_dashboard');
+				var rearrangeBtn = document.getElementById('opti_rearrange_btn');
+				var cancelBtn = document.getElementById('opti_layout_cancel_btn');
+				var resetBtn = document.getElementById('opti_layout_reset_btn');
+				
+				if (!container) return;
+
+				var defaultOrder = ['sales', 'shipping', 'fees', 'inventory', 'pnl', 'chart'];
+				var originalOrderHtml = [];
+
+				// 1. Instant Pre-sorting on DOM load to prevent layout flashing
+				function applySavedLayout() {
+					var savedOrder = localStorage.getItem('opti_dashboard_layout_order');
+					if (savedOrder) {
+						var orderArray = JSON.parse(savedOrder);
+						orderArray.forEach(function(id) {
+							var item = container.querySelector('.opti-dashboard-sort-item[data-block-id="' + id + '"]');
+							if (item) {
+								container.appendChild(item);
+							}
+						});
+					}
+				}
+				applySavedLayout();
+
+				// 2. Drag & Drop Helper for placement calculations
+				function getDragAfterElement(container, y) {
+					var draggableElements = Array.from(container.querySelectorAll('.opti-dashboard-sort-item:not(.opti-dragging)'));
+					
+					return draggableElements.reduce(function(closest, child) {
+						var box = child.getBoundingClientRect();
+						var offset = y - box.top - box.height / 2;
+						if (offset < 0 && offset > closest.offset) {
+							return { offset: offset, element: child };
+						} else {
+							return closest;
+						}
+					}, { offset: Number.NEGATIVE_INFINITY }).element;
+				}
+
+				// 3. Drag Event Listeners setup
+				function initDragEvents() {
+					var sortItems = container.querySelectorAll('.opti-dashboard-sort-item');
+					sortItems.forEach(function(item) {
+						item.addEventListener('dragstart', handleDragStart);
+						item.addEventListener('dragend', handleDragEnd);
+					});
+					container.addEventListener('dragover', handleDragOver);
+				}
+
+				function removeDragEvents() {
+					var sortItems = container.querySelectorAll('.opti-dashboard-sort-item');
+					sortItems.forEach(function(item) {
+						item.removeEventListener('dragstart', handleDragStart);
+						item.removeEventListener('dragend', handleDragEnd);
+					});
+					container.removeEventListener('dragover', handleDragOver);
+				}
+
+				function handleDragStart(e) {
+					e.dataTransfer.setData('text/plain', this.getAttribute('data-block-id'));
+					this.classList.add('opti-dragging');
+				}
+
+				function handleDragEnd() {
+					this.classList.remove('opti-dragging');
+				}
+
+				function handleDragOver(e) {
+					e.preventDefault();
+					var draggingEl = container.querySelector('.opti-dragging');
+					if (!draggingEl) return;
+					var nextSibling = getDragAfterElement(container, e.clientY);
+					if (nextSibling == null) {
+						container.appendChild(draggingEl);
+					} else {
+						container.insertBefore(draggingEl, nextSibling);
+					}
+				}
+
+				// 4. Mode Toggles (Rearrange, Cancel, Save, Reset)
+				var isRearrangeMode = false;
+
+				if (rearrangeBtn) {
+					rearrangeBtn.addEventListener('click', function() {
+						if (!isRearrangeMode) {
+							// ENTER REARRANGE MODE
+							isRearrangeMode = true;
+							container.classList.add('rearrange-active');
+							rearrangeBtn.innerHTML = '<span class="dashicons dashicons-yes" style="font-size: 16px; vertical-align: middle; margin-top: -3px; margin-right: 4px;"></span><?php esc_html_e( 'Save Layout', 'opti-analytics' ); ?>';
+							rearrangeBtn.classList.add('button', 'button-primary');
+							rearrangeBtn.classList.remove('page-title-action');
+							
+							if (cancelBtn) cancelBtn.style.display = 'inline-block';
+							if (resetBtn) resetBtn.style.display = 'inline-block';
+
+							// Capture current state to restore on Cancel
+							originalOrderHtml = Array.from(container.children);
+
+							// Enable drag capabilities
+							var sortItems = container.querySelectorAll('.opti-dashboard-sort-item');
+							sortItems.forEach(function(item) {
+								item.setAttribute('draggable', 'true');
+							});
+							initDragEvents();
+						} else {
+							// SAVE LAYOUT & EXIT
+							var currentOrder = [];
+							var sortItems = container.querySelectorAll('.opti-dashboard-sort-item');
+							sortItems.forEach(function(item) {
+								currentOrder.push(item.getAttribute('data-block-id'));
+							});
+							
+							localStorage.setItem('opti_dashboard_layout_order', JSON.stringify(currentOrder));
+							exitRearrangeMode();
+						}
+					});
+				}
+
+				if (cancelBtn) {
+					cancelBtn.addEventListener('click', function(e) {
+						e.preventDefault();
+						// Restore original HTML nodes sorting
+						originalOrderHtml.forEach(function(node) {
+							container.appendChild(node);
+						});
+						exitRearrangeMode();
+					});
+				}
+
+				if (resetBtn) {
+					resetBtn.addEventListener('click', function(e) {
+						e.preventDefault();
+						if (confirm('<?php esc_html_e( 'Are you sure you want to reset the dashboard to the default layout?', 'opti-analytics' ); ?>')) {
+							localStorage.removeItem('opti_dashboard_layout_order');
+							// Restore nodes to default order list
+							defaultOrder.forEach(function(id) {
+								var item = container.querySelector('.opti-dashboard-sort-item[data-block-id="' + id + '"]');
+								if (item) {
+									container.appendChild(item);
+								}
+							});
+							exitRearrangeMode();
+						}
+					});
+				}
+
+				function exitRearrangeMode() {
+					isRearrangeMode = false;
+					container.classList.remove('rearrange-active');
+					
+					rearrangeBtn.innerHTML = '<span class="dashicons dashicons-move" style="font-size: 16px; vertical-align: middle; margin-top: -3px; margin-right: 4px;"></span><?php esc_html_e( 'Rearrange Layout', 'opti-analytics' ); ?>';
+					rearrangeBtn.classList.remove('button', 'button-primary');
+					rearrangeBtn.classList.add('page-title-action');
+					
+					if (cancelBtn) cancelBtn.style.display = 'none';
+					if (resetBtn) resetBtn.style.display = 'none';
+
+					// Disable drag capabilities
+					var sortItems = container.querySelectorAll('.opti-dashboard-sort-item');
+					sortItems.forEach(function(item) {
+						item.removeAttribute('draggable');
+					});
+					removeDragEvents();
+				}
+			});
+		</script>
 		<?php
 	}
 
@@ -147,9 +328,14 @@ class Dashboard {
 		$dates = $this->get_date_range( $date_filter, $date_from, $date_to );
 		$this->render_filters( $dates, $date_filter, $date_from, $date_to );
 
-		$this->render_performance_kpis( $dates );
-
-		$this->render_sales_chart();
+		?>
+		<div class="opti-sortable-dashboard" id="opti_sortable_dashboard">
+			<?php
+			$this->render_performance_kpis( $dates );
+			$this->render_sales_chart();
+			?>
+		</div>
+		<?php
 	}
 
 	/**
@@ -445,107 +631,268 @@ class Dashboard {
 		?>
 
 		<!-- ═══════════ PERFORMANCE SECTION ═══════════ -->
-		<div class="opti-stats-header">
-			<h2 class="opti-section-title"><?php esc_html_e( 'Performance', 'opti-analytics' ); ?></h2>
-			<div class="opti-dropdown-wrap">
-				<button type="button" class="opti-dropdown-toggle" title="<?php esc_attr_e( 'Display stats', 'opti-analytics' ); ?>">
-					&#8942;
-				</button>
-				<div class="opti-dropdown-menu">
-					<div class="opti-dropdown-menu-title"><?php esc_html_e( 'Display stats:', 'opti-analytics' ); ?></div>
-					<?php foreach ( $kpis as $key => $kpi ) : ?>
-						<div class="opti-toggle-item">
-							<label class="opti-switch">
-								<input type="checkbox" class="opti-kpi-toggle" data-key="<?php echo esc_attr( $key ); ?>" <?php checked( $kpi['default'] ); ?>>
-								<span class="opti-slider"></span>
-							</label>
-							<span class="opti-toggle-label" onclick="this.previousElementSibling.querySelector('input').click();">
+		<div class="opti-performance-blocks">
+			
+			<!-- Block 1: Sales & Orders Overview -->
+			<div class="opti-dashboard-sort-item" data-block-id="sales">
+				<div class="opti-metric-block opti-theme-green">
+					<div class="opti-metric-block-header">
+						<h3>
+							<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+							<?php esc_html_e( 'Sales & Orders Overview', 'opti-analytics' ); ?>
+						</h3>
+					</div>
+					<!-- First Row: Sales Overview (4 columns) -->
+					<div class="opti-metric-block-grid grid-4-col opti-row-divider">
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Total Sales', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['total_sales'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'What customer paid', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Gross Sales', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['gross_sales'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Selling price × quantity ordered', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Net Sales', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['net_sales'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Gross sales minus refunds & discounts', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Average Order Value', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['aov'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Net sales divided by number of orders', 'opti-analytics' ); ?>)</div>
+						</div>
+					</div>
+					<!-- Second Row: Order Overview (4 columns) -->
+					<div class="opti-metric-block-grid grid-4-col">
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Orders', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo esc_html( (string) ( $metrics['orders_count'] ?? 0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'The number of new orders placed', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Products Sold', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo esc_html( (string) ( $metrics['products_sold'] ?? 0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Total quantity of all items purchased', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Average Item Per Order', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo esc_html( (string) round( $metrics['average_items_per_order'] ?? 0.0, 1 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Average number of items per order', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Total Discounts', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['off_total'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Total coupon & sale discounts given', 'opti-analytics' ); ?>)</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Block 2: Fulfillment & Logistics -->
+			<div class="opti-dashboard-sort-item" data-block-id="shipping">
+				<div class="opti-metric-block opti-theme-blue">
+					<div class="opti-metric-block-header">
+						<h3>
+							<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+							<?php esc_html_e( 'Shipping & Cost of Goods', 'opti-analytics' ); ?>
+						</h3>
+					</div>
+					<div class="opti-metric-block-grid grid-3-col">
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Shipping Collected', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['shipping'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Total shipping charges collected', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'Actual Shipping Cost', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['actual_shipping_cost'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Total actual shipping cost', 'opti-analytics' ); ?>)</div>
+						</div>
+						<div class="kpi-cell">
+							<div class="kpi-cell-title"><?php esc_html_e( 'COGS (Cost of Goods Sold)', 'opti-analytics' ); ?></div>
+							<div class="kpi-cell-value">
+								<?php echo wp_kses_post( wc_price( $metrics['cogs'] ?? 0.0 ) ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Total cost of goods sold', 'opti-analytics' ); ?>)</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Block 3: Granular Gateway & Operational Fees -->
+			<?php
+			$revenue_order_fields   = Settings::parse_csv_option( Settings::PNL_REVENUE_ORDER_FIELDS );
+			$revenue_product_fields = Settings::parse_csv_option( Settings::PNL_REVENUE_PRODUCT_FIELDS );
+			$cost_order_fields      = Settings::parse_csv_option( Settings::PNL_COST_ORDER_FIELDS );
+			$cost_product_fields    = Settings::parse_csv_option( Settings::PNL_COST_PRODUCT_FIELDS );
+			$vo_order_fields        = Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS );
+			$vo_product_fields      = Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS );
+
+			$custom_fields = array();
+
+			// Revenue fields (order-level)
+			foreach ( $revenue_order_fields as $f ) {
+				$custom_fields[ $f ] = array(
+					'label' => Data_Engine::get_custom_field_label( $f ),
+					'desc'  => __( 'Custom revenue field (order-level)', 'opti-analytics' ),
+					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
+				);
+			}
+			// Revenue fields (line item)
+			foreach ( $revenue_product_fields as $f ) {
+				$custom_fields[ $f ] = array(
+					'label' => Data_Engine::get_custom_field_label( $f ),
+					'desc'  => __( 'Custom revenue field (line item)', 'opti-analytics' ),
+					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
+				);
+			}
+			// Cost fields (order-level)
+			foreach ( $cost_order_fields as $f ) {
+				$custom_fields[ $f ] = array(
+					'label' => Data_Engine::get_custom_field_label( $f ),
+					'desc'  => __( 'Custom cost field (order-level)', 'opti-analytics' ),
+					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
+				);
+			}
+			// Cost fields (line item)
+			foreach ( $cost_product_fields as $f ) {
+				$custom_fields[ $f ] = array(
+					'label' => Data_Engine::get_custom_field_label( $f ),
+					'desc'  => __( 'Custom cost field (line item)', 'opti-analytics' ),
+					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
+				);
+			}
+			// View only fields (order-level)
+			foreach ( $vo_order_fields as $f ) {
+				$custom_fields[ $f ] = array(
+					'label' => Data_Engine::get_custom_field_label( $f ),
+					'desc'  => __( 'View only field (order-level)', 'opti-analytics' ),
+					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
+				);
+			}
+			// View only fields (line item)
+			foreach ( $vo_product_fields as $f ) {
+				$custom_fields[ $f ] = array(
+					'label' => Data_Engine::get_custom_field_label( $f ),
+					'desc'  => __( 'View only field (line item)', 'opti-analytics' ),
+					'value' => isset( $metrics[ $f ] ) ? ( strpos( $f, 'count' ) !== false ? esc_html( (string) $metrics[ $f ] ) : wp_kses_post( wc_price( $metrics[ $f ] ) ) ) : wp_kses_post( wc_price( 0.0 ) ),
+				);
+			}
+			?>
+
+			<?php if ( ! empty( $custom_fields ) ) : ?>
+				<?php
+				$cols_count = min( 4, count( $custom_fields ) );
+				$grid_class = "grid-{$cols_count}-col";
+				?>
+				<div class="opti-dashboard-sort-item" data-block-id="fees">
+					<div class="opti-metric-block opti-theme-purple">
+						<div class="opti-metric-block-header">
+							<h3>
+								<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+								<?php esc_html_e( 'Transaction & Gateway Fees', 'opti-analytics' ); ?>
+							</h3>
+						</div>
+						<div class="opti-metric-block-grid <?php echo esc_attr( $grid_class ); ?>">
+							<?php foreach ( $custom_fields as $field_key => $field_data ) : ?>
+								<div class="kpi-cell">
+									<div class="kpi-cell-title"><?php echo esc_html( $field_data['label'] ); ?></div>
+									<div class="kpi-cell-value">
+										<?php echo $field_data['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Sanitized during array construction. ?>
+									</div>
+									<div class="kpi-cell-desc">(<?php echo esc_html( $field_data['desc'] ); ?>)</div>
+								</div>
+							<?php endforeach; ?>
+						</div>
+					</div>
+				</div>
+			<?php endif; ?>
+
+			<!-- Block 4: Inventory Alerts (High Priority) -->
+			<?php
+			$oos_ids = wc_get_products(
+				array(
+					'status'       => 'publish',
+					'stock_status' => 'outofstock',
+					'return'       => 'ids',
+					'limit'        => -1,
+				)
+			);
+			$oos_count = count( $oos_ids );
+			$oos_class = $oos_count > 0 ? 'opti-inventory-alert' : '';
+			?>
+			<div class="opti-dashboard-sort-item" data-block-id="inventory">
+				<div class="opti-metric-block opti-theme-slate <?php echo esc_attr( $oos_class ); ?>">
+					<div class="opti-metric-block-header">
+						<h3>
+							<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+							<?php esc_html_e( 'Inventory Status', 'opti-analytics' ); ?>
+						</h3>
+					</div>
+					<div class="opti-metric-block-grid grid-1-col">
+						<div class="kpi-cell">
+							<div class="kpi-cell-title" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>>
+								<?php esc_html_e( 'Out of Stock', 'opti-analytics' ); ?>
+							</div>
+							<div class="kpi-cell-value" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>>
+								<?php echo esc_html( (string) $oos_count ); ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php esc_html_e( 'Number of products currently out of stock', 'opti-analytics' ); ?>)</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+		</div>
+
+		<!-- ═══════════ PROFIT & LOSS SECTION ═══════════ -->
+		<div class="opti-dashboard-sort-item" data-block-id="pnl">
+			<div class="opti-metric-block opti-theme-amber" style="margin-top: 30px;">
+				<div class="opti-metric-block-header">
+					<h3>
+						<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+						<?php esc_html_e( 'Profit & Loss', 'opti-analytics' ); ?>
+					</h3>
+				</div>
+				<div class="opti-metric-block-grid grid-5-col">
+					<?php foreach ( $pnl_kpis as $key => $kpi ) : ?>
+						<div class="kpi-cell" data-kpi="<?php echo esc_attr( $key ); ?>">
+							<div class="kpi-cell-title" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
 								<?php echo esc_html( $kpi['label'] ); ?>
-							</span>
+							</div>
+							<div class="kpi-cell-value" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
+								<?php echo $kpi['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Values are escaped during array construction. ?>
+							</div>
+							<div class="kpi-cell-desc">(<?php echo esc_html( $kpi['desc'] ); ?>)</div>
 						</div>
 					<?php endforeach; ?>
 				</div>
 			</div>
 		</div>
-		
-		<div class="opti-dashboard-grid">
-			<?php foreach ( $kpis as $key => $kpi ) : ?>
-				<div class="kpi-cell" data-kpi="<?php echo esc_attr( $key ); ?>" style="<?php echo $kpi['default'] ? '' : 'display: none;'; ?>">
-					<div class="kpi-cell-title" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
-						<?php echo esc_html( $kpi['label'] ); ?>
-					</div>
-					<div class="kpi-cell-value"><?php echo $kpi['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Values are escaped during array construction. ?></div>
-					<div class="kpi-cell-desc">(<?php echo esc_html( $kpi['desc'] ); ?>)</div>
-				</div>
-			<?php endforeach; ?>
-		</div>
 
-		<!-- ═══════════ PROFIT & LOSS SECTION ═══════════ -->
-		<div class="opti-stats-header" style="margin-top: 30px;">
-			<h2 class="opti-section-title"><?php esc_html_e( 'Profit & Loss', 'opti-analytics' ); ?></h2>
-		</div>
-
-		<div class="opti-dashboard-grid opti-pnl-grid">
-			<?php foreach ( $pnl_kpis as $key => $kpi ) : ?>
-				<div class="kpi-cell" data-kpi="<?php echo esc_attr( $key ); ?>">
-					<div class="kpi-cell-title" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
-						<?php echo esc_html( $kpi['label'] ); ?>
-					</div>
-					<div class="kpi-cell-value" <?php echo ! empty( $kpi['color'] ) ? 'style="color: ' . esc_attr( $kpi['color'] ) . ';"' : ''; ?>>
-						<?php echo $kpi['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Values are escaped during array construction. ?>
-					</div>
-					<div class="kpi-cell-desc">(<?php echo esc_html( $kpi['desc'] ); ?>)</div>
-				</div>
-			<?php endforeach; ?>
-		</div>
-
-		<script>
-			document.addEventListener('DOMContentLoaded', function() {
-				var toggleBtn = document.querySelector('.opti-dropdown-toggle');
-				var dropdown = document.querySelector('.opti-dropdown-menu');
-				
-				if (toggleBtn && dropdown) {
-					toggleBtn.addEventListener('click', function(e) {
-						e.stopPropagation();
-						dropdown.classList.toggle('active');
-					});
-					
-					document.addEventListener('click', function(e) {
-						if (!dropdown.contains(e.target) && e.target !== toggleBtn) {
-							dropdown.classList.remove('active');
-						}
-					});
-				}
-
-				var toggles = document.querySelectorAll('.opti-kpi-toggle');
-				var savedState = localStorage.getItem('opti_dashboard_kpis');
-				var kpiState = savedState ? JSON.parse(savedState) : {};
-
-				function applyState() {
-					toggles.forEach(function(toggle) {
-						var key = toggle.getAttribute('data-key');
-						var isVisible = kpiState.hasOwnProperty(key) ? kpiState[key] : toggle.defaultChecked;
-						toggle.checked = isVisible;
-						
-						var cell = document.querySelector('.kpi-cell[data-kpi="' + key + '"]');
-						if (cell) {
-							cell.style.display = isVisible ? 'block' : 'none';
-						}
-					});
-				}
-
-				applyState();
-
-				toggles.forEach(function(toggle) {
-					toggle.addEventListener('change', function() {
-						var key = this.getAttribute('data-key');
-						kpiState[key] = this.checked;
-						localStorage.setItem('opti_dashboard_kpis', JSON.stringify(kpiState));
-						applyState();
-					});
-				});
-			});
-		</script>
 		<?php
 	}
 
@@ -554,10 +901,19 @@ class Dashboard {
 	 */
 	private function render_sales_chart(): void {
 		?>
-		<div class="opti-chart-container">
-			<h3><?php esc_html_e( 'Sales Trend (Placeholder)', 'opti-analytics' ); ?></h3>
-			<div class="opti-chart-placeholder">
-				<?php esc_html_e( 'Chart will be rendered here.', 'opti-analytics' ); ?>
+		<div class="opti-dashboard-sort-item" data-block-id="chart">
+			<div class="opti-metric-block opti-theme-slate" style="margin-top: 30px;">
+				<div class="opti-metric-block-header">
+					<h3>
+						<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+						<?php esc_html_e( 'Sales Trend (Placeholder)', 'opti-analytics' ); ?>
+					</h3>
+				</div>
+				<div class="opti-metric-block-grid grid-1-col" style="padding: 20px;">
+					<div class="opti-chart-placeholder" style="height: 300px; background: #f9f9f9; display: flex; align-items: center; justify-content: center; color: #999;">
+						<?php esc_html_e( 'Chart will be rendered here.', 'opti-analytics' ); ?>
+					</div>
+				</div>
 			</div>
 		</div>
 		<?php

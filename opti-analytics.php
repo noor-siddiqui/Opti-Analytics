@@ -3,7 +3,7 @@
  * Plugin Name:       Opti Analytics
  * Plugin URI:        https://github.com/noor-siddiqui/Opti-Analytics
  * Description:       A custom sales analytics plugin for WooCommerce supporting dynamic custom fields and Excel exports.
- * Version:           0.0.5-beta
+ * Version:           0.0.6-beta
  * Requires at least: 6.0
  * Requires PHP:      8.1
  * Author:            Noor Nabiul Alam Siddiqui
@@ -30,7 +30,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define helpful plugin constants for paths and URLs.
-define( 'OPTI_ANALYTICS_VERSION', '0.0.5-beta' );
+define( 'OPTI_ANALYTICS_VERSION', '0.0.6-beta' );
 define( 'OPTI_ANALYTICS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'OPTI_ANALYTICS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
