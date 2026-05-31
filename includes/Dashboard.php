@@ -47,13 +47,13 @@ class Dashboard {
 		<div class="wrap">
 			<h1 class="opti-dashboard-header">
 				<?php esc_html_e( 'Opti Analytics', 'opti-analytics' ); ?>
-				<button type="button" class="page-title-action opti-rearrange-btn" id="opti_rearrange_btn">
-					<span class="dashicons dashicons-move" style="font-size: 16px; vertical-align: middle; margin-top: -3px; margin-right: 4px;"></span><?php esc_html_e( 'Rearrange Layout', 'opti-analytics' ); ?>
+				<button type="button" class="page-title-action button button-primary opti-rearrange-btn" id="opti_rearrange_btn">
+					<span class="dashicons dashicons-move" style="font-size: 16px; vertical-align: middle;"></span><?php esc_html_e( 'Rearrange Layout', 'opti-analytics' ); ?>
 				</button>
-				<button type="button" class="button button-link opti-layout-cancel-btn" id="opti_layout_cancel_btn" style="display: none; margin-left: 10px; line-height: 2.15384615; vertical-align: middle;">
+				<button type="button" class="button button-link opti-layout-cancel-btn" id="opti_layout_cancel_btn" style="display: none; margin-left: 10px; padding: 0 8px; vertical-align: middle;">
 					<?php esc_html_e( 'Cancel', 'opti-analytics' ); ?>
 				</button>
-				<button type="button" class="button button-link opti-layout-reset-btn" id="opti_layout_reset_btn" style="display: none; margin-left: 10px; line-height: 2.15384615; vertical-align: middle; color: #dc2626;">
+				<button type="button" class="button button-link opti-layout-reset-btn" id="opti_layout_reset_btn" style="display: none; margin-left: 10px; padding: 0 8px; vertical-align: middle; color: #dc2626;">
 					<?php esc_html_e( 'Reset Order', 'opti-analytics' ); ?>
 				</button>
 			</h1>
@@ -71,7 +71,7 @@ class Dashboard {
 				
 				if (!container) return;
 
-				var defaultOrder = ['sales', 'shipping', 'fees', 'inventory', 'pnl', 'chart'];
+				var defaultOrder = ['sales', 'shipping', 'fees', 'view_only', 'inventory', 'pnl', 'customer_insiders'];
 				var originalOrderHtml = [];
 
 				// 1. Instant Pre-sorting on DOM load to prevent layout flashing
@@ -79,10 +79,24 @@ class Dashboard {
 					var savedOrder = localStorage.getItem('opti_dashboard_layout_order');
 					if (savedOrder) {
 						var orderArray = JSON.parse(savedOrder);
+						var allItems = Array.from(container.querySelectorAll('.opti-dashboard-sort-item'));
+						var allIds = allItems.map(function(item) { return item.getAttribute('data-block-id'); });
+
+						// Append all items from orderArray first
 						orderArray.forEach(function(id) {
 							var item = container.querySelector('.opti-dashboard-sort-item[data-block-id="' + id + '"]');
 							if (item) {
 								container.appendChild(item);
+							}
+						});
+
+						// Append any items that were not in orderArray to make sure new blocks are visible
+						allIds.forEach(function(id) {
+							if (orderArray.indexOf(id) === -1) {
+								var item = container.querySelector('.opti-dashboard-sort-item[data-block-id="' + id + '"]');
+								if (item) {
+									container.appendChild(item);
+								}
 							}
 						});
 					}
@@ -153,7 +167,7 @@ class Dashboard {
 							// ENTER REARRANGE MODE
 							isRearrangeMode = true;
 							container.classList.add('rearrange-active');
-							rearrangeBtn.innerHTML = '<span class="dashicons dashicons-yes" style="font-size: 16px; vertical-align: middle; margin-top: -3px; margin-right: 4px;"></span><?php esc_html_e( 'Save Layout', 'opti-analytics' ); ?>';
+							rearrangeBtn.innerHTML = '<span class="dashicons dashicons-yes" style="font-size: 16px; vertical-align: middle; color: white;"></span><?php esc_html_e( 'Save Layout', 'opti-analytics' ); ?>';
 							rearrangeBtn.classList.add('button', 'button-primary');
 							rearrangeBtn.classList.remove('page-title-action');
 							
@@ -228,6 +242,32 @@ class Dashboard {
 						item.removeAttribute('draggable');
 					});
 					removeDragEvents();
+				}
+
+				// 5. Out of Stock Products Modal Popup Handlers
+				var oosModal = document.getElementById('opti_oos_modal');
+				var showAllLink = document.getElementById('opti_show_all_oos');
+				if (oosModal && showAllLink) {
+					showAllLink.addEventListener('click', function(e) {
+						e.preventDefault();
+						oosModal.style.display = 'flex';
+						document.body.style.overflow = 'hidden';
+					});
+
+					var closeElements = oosModal.querySelectorAll('.opti-modal-close, .opti-modal-close-btn');
+					closeElements.forEach(function(el) {
+						el.addEventListener('click', function() {
+							oosModal.style.display = 'none';
+							document.body.style.overflow = '';
+						});
+					});
+
+					oosModal.addEventListener('click', function(e) {
+						if (e.target === oosModal) {
+							oosModal.style.display = 'none';
+							document.body.style.overflow = '';
+						}
+					});
 				}
 			});
 		</script>
@@ -332,7 +372,7 @@ class Dashboard {
 		<div class="opti-sortable-dashboard" id="opti_sortable_dashboard">
 			<?php
 			$this->render_performance_kpis( $dates );
-			$this->render_sales_chart();
+			$this->render_customer_insiders( $dates );
 			?>
 		</div>
 		<?php
@@ -751,11 +791,12 @@ class Dashboard {
 			$vo_order_fields        = Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS );
 			$vo_product_fields      = Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS );
 
-			$custom_fields = array();
+			// ── 1. TRANSACTION & GATEWAY FEES (P&L Impacting Custom Fields) ──
+			$fees_fields = array();
 
 			// Revenue fields (order-level)
 			foreach ( $revenue_order_fields as $f ) {
-				$custom_fields[ $f ] = array(
+				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
 					'desc'  => __( 'Custom revenue field (order-level)', 'opti-analytics' ),
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
@@ -763,7 +804,7 @@ class Dashboard {
 			}
 			// Revenue fields (line item)
 			foreach ( $revenue_product_fields as $f ) {
-				$custom_fields[ $f ] = array(
+				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
 					'desc'  => __( 'Custom revenue field (line item)', 'opti-analytics' ),
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
@@ -771,7 +812,7 @@ class Dashboard {
 			}
 			// Cost fields (order-level)
 			foreach ( $cost_order_fields as $f ) {
-				$custom_fields[ $f ] = array(
+				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
 					'desc'  => __( 'Custom cost field (order-level)', 'opti-analytics' ),
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
@@ -779,15 +820,19 @@ class Dashboard {
 			}
 			// Cost fields (line item)
 			foreach ( $cost_product_fields as $f ) {
-				$custom_fields[ $f ] = array(
+				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
 					'desc'  => __( 'Custom cost field (line item)', 'opti-analytics' ),
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
 				);
 			}
+
+			// ── 2. VIEW ONLY FIELDS (Non-P&L Custom Fields) ──
+			$view_only_fields = array();
+
 			// View only fields (order-level)
 			foreach ( $vo_order_fields as $f ) {
-				$custom_fields[ $f ] = array(
+				$view_only_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
 					'desc'  => __( 'View only field (order-level)', 'opti-analytics' ),
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
@@ -795,7 +840,7 @@ class Dashboard {
 			}
 			// View only fields (line item)
 			foreach ( $vo_product_fields as $f ) {
-				$custom_fields[ $f ] = array(
+				$view_only_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
 					'desc'  => __( 'View only field (line item)', 'opti-analytics' ),
 					'value' => isset( $metrics[ $f ] ) ? ( strpos( $f, 'count' ) !== false ? esc_html( (string) $metrics[ $f ] ) : wp_kses_post( wc_price( $metrics[ $f ] ) ) ) : wp_kses_post( wc_price( 0.0 ) ),
@@ -803,9 +848,9 @@ class Dashboard {
 			}
 			?>
 
-			<?php if ( ! empty( $custom_fields ) ) : ?>
+			<?php if ( ! empty( $fees_fields ) ) : ?>
 				<?php
-				$cols_count = min( 4, count( $custom_fields ) );
+				$cols_count = min( 4, count( $fees_fields ) );
 				$grid_class = "grid-{$cols_count}-col";
 				?>
 				<div class="opti-dashboard-sort-item" data-block-id="fees">
@@ -817,7 +862,7 @@ class Dashboard {
 							</h3>
 						</div>
 						<div class="opti-metric-block-grid <?php echo esc_attr( $grid_class ); ?>">
-							<?php foreach ( $custom_fields as $field_key => $field_data ) : ?>
+							<?php foreach ( $fees_fields as $field_key => $field_data ) : ?>
 								<div class="kpi-cell">
 									<div class="kpi-cell-title"><?php echo esc_html( $field_data['label'] ); ?></div>
 									<div class="kpi-cell-value">
@@ -831,7 +876,35 @@ class Dashboard {
 				</div>
 			<?php endif; ?>
 
-			<!-- Block 4: Inventory Alerts (High Priority) -->
+			<?php if ( ! empty( $view_only_fields ) ) : ?>
+				<?php
+				$cols_count = min( 4, count( $view_only_fields ) );
+				$grid_class = "grid-{$cols_count}-col";
+				?>
+				<div class="opti-dashboard-sort-item" data-block-id="view_only">
+					<div class="opti-metric-block opti-theme-slate">
+						<div class="opti-metric-block-header">
+							<h3>
+								<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
+								<?php esc_html_e( 'View Only Fields', 'opti-analytics' ); ?>
+							</h3>
+						</div>
+						<div class="opti-metric-block-grid <?php echo esc_attr( $grid_class ); ?>">
+							<?php foreach ( $view_only_fields as $field_key => $field_data ) : ?>
+								<div class="kpi-cell">
+									<div class="kpi-cell-title"><?php echo esc_html( $field_data['label'] ); ?></div>
+									<div class="kpi-cell-value">
+										<?php echo $field_data['value']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Sanitized during array construction. ?>
+									</div>
+									<div class="kpi-cell-desc">(<?php echo esc_html( $field_data['desc'] ); ?>)</div>
+								</div>
+							<?php endforeach; ?>
+						</div>
+					</div>
+				</div>
+			<?php endif; ?>
+
+			<!-- Block 4: Inventory Status & Stock Velocity -->
 			<?php
 			$oos_ids = wc_get_products(
 				array(
@@ -841,29 +914,187 @@ class Dashboard {
 					'limit'        => -1,
 				)
 			);
-			$oos_count = count( $oos_ids );
-			$oos_class = $oos_count > 0 ? 'opti-inventory-alert' : '';
+			$oos_count    = count( $oos_ids );
+			$oos_class    = $oos_count > 0 ? 'opti-inventory-alert' : '';
+			$oos_products = array();
+			foreach ( $oos_ids as $id ) {
+				$product = wc_get_product( $id );
+				if ( $product ) {
+					$oos_products[] = array(
+						'name' => $product->get_name(),
+						'id'   => $product->get_id(),
+					);
+				}
+			}
+
+			// Fetch product velocity data
+			$order_ids_for_velocity = array();
+			if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
+				$args_vel = array(
+					'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
+					'limit'        => -1,
+					'return'       => 'ids',
+					'status'       => array( 'wc-completed', 'wc-processing' ),
+				);
+				$order_ids_for_velocity = wc_get_orders( $args_vel );
+			}
+			$velocity = $engine->get_product_velocity( $order_ids_for_velocity );
 			?>
 			<div class="opti-dashboard-sort-item" data-block-id="inventory">
 				<div class="opti-metric-block opti-theme-slate <?php echo esc_attr( $oos_class ); ?>">
 					<div class="opti-metric-block-header">
 						<h3>
 							<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
-							<?php esc_html_e( 'Inventory Status', 'opti-analytics' ); ?>
+							<?php esc_html_e( 'Inventory Status & Stock Velocity', 'opti-analytics' ); ?>
 						</h3>
 					</div>
-					<div class="opti-metric-block-grid grid-1-col">
+					<div class="opti-metric-block-grid grid-3-col">
+						<!-- Card 1: Out of Stock -->
 						<div class="kpi-cell">
 							<div class="kpi-cell-title" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>>
-								<?php esc_html_e( 'Out of Stock', 'opti-analytics' ); ?>
+								<?php esc_html_e( 'Out of Stock Products', 'opti-analytics' ); ?> <span style="font-weight: bold; font-size: 16px;" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>><?php echo esc_html( (string) $oos_count ); ?></span>
 							</div>
-							<div class="kpi-cell-value" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>>
-								<?php echo esc_html( (string) $oos_count ); ?>
+
+							<!-- Inline Out of Stock List (Max 3) -->
+							<div class="opti-velocity-list" style="margin-top: 10px; margin-bottom: 8px;">
+								<?php if ( ! empty( $oos_products ) ) : ?>
+									<ul style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #991b1b; list-style-type: disc;">
+										<?php
+										$oos_inline = array_slice( $oos_products, 0, 3 );
+										foreach ( $oos_inline as $item ) :
+											?>
+											<li style="margin-bottom: 2px;">
+												<span style="font-weight: 500; display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
+													<?php echo esc_html( $item['name'] ); ?>
+												</span>
+											</li>
+										<?php endforeach; ?>
+									</ul>
+									<?php if ( $oos_count > 3 ) : ?>
+										<a href="#" class="opti-show-all-oos" id="opti_show_all_oos" style="font-size: 11px; float: right; margin-top: 4px; color: #2271b1; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 2px;">
+											<?php esc_html_e( 'Show All', 'opti-analytics' ); ?> &rarr;
+										</a>
+									<?php endif; ?>
+								<?php else : ?>
+									<p style="font-size: 12px; color: #166534; margin: 0; font-style: italic; font-weight: 500;">
+										<span class="dashicons dashicons-yes" style="font-size: 14px; width: 14px; height: 14px; vertical-align: middle;"></span>
+										<?php esc_html_e( 'All products are in stock.', 'opti-analytics' ); ?>
+									</p>
+								<?php endif; ?>
 							</div>
-							<div class="kpi-cell-desc">(<?php esc_html_e( 'Number of products currently out of stock', 'opti-analytics' ); ?>)</div>
+
+							<div class="kpi-cell-desc" style="clear: both; margin-top: 8px;">(<?php esc_html_e( 'Products currently out of stock', 'opti-analytics' ); ?>)</div>
+						</div>
+
+						<!-- Card 2: Fast-Moving Products (Top 3) -->
+						<div class="kpi-cell">
+							<div class="kpi-cell-title" style="color: #166534; font-weight: 600;">
+								<span class="dashicons dashicons-chart-line" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
+								<?php esc_html_e( 'Top 3 Fast-Moving Items', 'opti-analytics' ); ?>
+							</div>
+							<div class="opti-velocity-list" style="margin-top: 10px;">
+								<?php if ( ! empty( $velocity['fast_moving'] ) ) : ?>
+									<ol style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #1f2937;">
+										<?php foreach ( $velocity['fast_moving'] as $item ) : ?>
+											<li style="margin-bottom: 4px;">
+												<span style="font-weight: 500; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
+													<?php echo esc_html( $item['name'] ); ?>
+												</span>
+												<span style="float: right; font-weight: 600; color: #16a34a; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; font-size: 11px;">
+													<?php
+													/* translators: %s: quantity sold */
+													printf( esc_html__( '%s sold', 'opti-analytics' ), esc_html( (string) $item['qty'] ) );
+													?>
+												</span>
+											</li>
+										<?php endforeach; ?>
+									</ol>
+								<?php else : ?>
+									<p style="font-size: 12px; color: #646970; margin: 0; font-style: italic;">
+										<?php esc_html_e( 'No sales data in this range.', 'opti-analytics' ); ?>
+									</p>
+								<?php endif; ?>
+							</div>
+							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'Highest quantities sold in selected range', 'opti-analytics' ); ?>)</div>
+						</div>
+
+						<!-- Card 3: Slow-Moving Products (Bottom 3) -->
+						<div class="kpi-cell">
+							<div class="kpi-cell-title" style="color: #b45309; font-weight: 600;">
+								<span class="dashicons dashicons-clock" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
+								<?php esc_html_e( 'Top 3 Slow-Moving Items', 'opti-analytics' ); ?>
+							</div>
+							<div class="opti-velocity-list" style="margin-top: 10px;">
+								<?php if ( ! empty( $velocity['slow_moving'] ) ) : ?>
+									<ol style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #1f2937;">
+										<?php foreach ( $velocity['slow_moving'] as $item ) : ?>
+											<li style="margin-bottom: 4px;">
+												<span style="font-weight: 500; display: inline-block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
+													<?php echo esc_html( $item['name'] ); ?>
+												</span>
+												<span style="float: right; font-size: 11px; color: #b45309; background: #fffbeb; padding: 1px 6px; border-radius: 4px; font-weight: 600;">
+													<?php
+													if ( null !== $item['stock'] ) {
+														/* translators: 1: quantity sold, 2: stock quantity */
+														printf( esc_html__( '%1$s sold / %2$s stock', 'opti-analytics' ), esc_html( (string) $item['qty'] ), esc_html( (string) $item['stock'] ) );
+													} else {
+														/* translators: %s: quantity sold */
+														printf( esc_html__( '%s sold', 'opti-analytics' ), esc_html( (string) $item['qty'] ) );
+													}
+													?>
+												</span>
+											</li>
+										<?php endforeach; ?>
+									</ol>
+								<?php else : ?>
+									<p style="font-size: 12px; color: #646970; margin: 0; font-style: italic;">
+										<?php esc_html_e( 'No in-stock products found.', 'opti-analytics' ); ?>
+									</p>
+								<?php endif; ?>
+							</div>
+							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'In-stock items with lowest sales velocity', 'opti-analytics' ); ?>)</div>
 						</div>
 					</div>
 				</div>
+
+				<!-- Out of Stock Modal Popup Overlay -->
+				<div class="opti-modal-overlay" id="opti_oos_modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: 99999; backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+					<div class="opti-modal-content" style="background: #ffffff; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); overflow: hidden; border: 1px solid #e5e7eb; animation: optiModalFadeIn 0.2s ease-out;">
+						<!-- Header -->
+						<div style="padding: 16px 20px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; background: #fdf2f2;">
+							<h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #991b1b; display: flex; align-items: center; gap: 8px;">
+								<span class="dashicons dashicons-warning" style="color: #dc2626; vertical-align: middle;"></span>
+								<?php esc_html_e( 'All Out of Stock Products', 'opti-analytics' ); ?>
+								<span style="font-size: 12px; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 9999px; font-weight: 600; margin-left: 4px;">
+									<?php echo esc_html( (string) $oos_count ); ?>
+								</span>
+							</h3>
+							<button type="button" class="opti-modal-close" style="background: none; border: none; cursor: pointer; color: #9ca3af; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: background 0.15s, color 0.15s;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#4b5563';" onmouseout="this.style.background='none'; this.style.color='#9ca3af';">
+								<span class="dashicons dashicons-no-alt" style="font-size: 20px; width: 20px; height: 20px;"></span>
+							</button>
+						</div>
+						<!-- Body -->
+						<div style="padding: 20px; max-height: 350px; overflow-y: auto;">
+							<ul style="margin: 0; padding: 0; list-style: none;">
+								<?php foreach ( $oos_products as $idx => $p ) : ?>
+									<li style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; <?php echo $idx === count($oos_products)-1 ? 'border-bottom: none;' : ''; ?>">
+										<span style="font-size: 13px; font-weight: 500; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;" title="<?php echo esc_attr( $p['name'] ); ?>">
+											<?php echo esc_html( $p['name'] ); ?>
+										</span>
+										<span style="font-size: 11px; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+											<?php esc_html_e( 'Out of stock', 'opti-analytics' ); ?>
+										</span>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						</div>
+						<!-- Footer -->
+						<div style="padding: 14px 20px; border-top: 1px solid #f3f4f6; display: flex; justify-content: flex-end; background: #f9fafb;">
+							<button type="button" class="button opti-modal-close-btn" style="font-size: 12px;"><?php esc_html_e( 'Close', 'opti-analytics' ); ?></button>
+						</div>
+					</div>
+				</div>
+
 			</div>
 
 		</div>
@@ -897,21 +1128,126 @@ class Dashboard {
 	}
 
 	/**
-	 * Renders the sales chart placeholder.
+	 * Renders the Customer Insiders block.
+	 *
+	 * @param array<string, string> $dates Computed start and end dates.
 	 */
-	private function render_sales_chart(): void {
+	private function render_customer_insiders( array $dates ): void {
+		$engine = new Data_Engine();
+
+		$order_ids = array();
+		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
+			$args = array(
+				'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
+				'limit'        => -1,
+				'return'       => 'ids',
+				'status'       => array( 'wc-completed', 'wc-processing' ),
+			);
+			$order_ids = wc_get_orders( $args );
+		}
+
+		$insiders = $engine->get_customer_insiders( $order_ids, $dates['start'] ?? '' );
 		?>
-		<div class="opti-dashboard-sort-item" data-block-id="chart">
-			<div class="opti-metric-block opti-theme-slate" style="margin-top: 30px;">
+		<div class="opti-dashboard-sort-item" data-block-id="customer_insiders">
+			<div class="opti-metric-block opti-theme-purple" style="margin-top: 30px;">
 				<div class="opti-metric-block-header">
 					<h3>
 						<span class="dashicons dashicons-menu opti-drag-handle" title="<?php esc_attr_e( 'Drag to reorder', 'opti-analytics' ); ?>"></span>
-						<?php esc_html_e( 'Sales Trend (Placeholder)', 'opti-analytics' ); ?>
+						<?php esc_html_e( 'Customer Insiders', 'opti-analytics' ); ?>
 					</h3>
 				</div>
-				<div class="opti-metric-block-grid grid-1-col" style="padding: 20px;">
-					<div class="opti-chart-placeholder" style="height: 300px; background: #f9f9f9; display: flex; align-items: center; justify-content: center; color: #999;">
-						<?php esc_html_e( 'Chart will be rendered here.', 'opti-analytics' ); ?>
+				<div class="opti-metric-block-grid grid-3-col">
+					<!-- Column 1: VIP Customers (Top 3 Spenders) -->
+					<div class="kpi-cell">
+						<div class="kpi-cell-title" style="color: #6b21a8; font-weight: 600;">
+							<span class="dashicons dashicons-awards" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
+							<?php esc_html_e( 'Top 3 VIP Customers', 'opti-analytics' ); ?>
+						</div>
+						<div class="opti-velocity-list" style="margin-top: 10px;">
+							<?php if ( ! empty( $insiders['vip'] ) ) : ?>
+								<ol style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #1f2937;">
+									<?php foreach ( $insiders['vip'] as $customer ) : ?>
+										<li style="margin-bottom: 4px;">
+											<span style="font-weight: 500; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $customer['name'] ); ?>">
+												<?php echo esc_html( $customer['name'] ); ?>
+											</span>
+											<span style="float: right; font-weight: 600; color: #6b21a8; background: #faf5ff; padding: 1px 6px; border-radius: 4px; font-size: 11px;">
+												<?php echo wp_kses_post( wc_price( $customer['spend'] ) ); ?>
+											</span>
+										</li>
+									<?php endforeach; ?>
+								</ol>
+							<?php else : ?>
+								<p style="font-size: 12px; color: #646970; margin: 0; font-style: italic;">
+									<?php esc_html_e( 'No customer activity in this range.', 'opti-analytics' ); ?>
+								</p>
+							<?php endif; ?>
+						</div>
+						<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'Highest spending customers in selected range', 'opti-analytics' ); ?>)</div>
+					</div>
+
+					<!-- Column 2: Buyer Mix (New vs Returning) -->
+					<div class="kpi-cell">
+						<div class="kpi-cell-title" style="color: #1e40af; font-weight: 600;">
+							<span class="dashicons dashicons-groups" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
+							<?php esc_html_e( 'Buyer Mix', 'opti-analytics' ); ?>
+						</div>
+						<div style="margin-top: 12px;">
+							<?php
+							$total_buyers = $insiders['new_count'] + $insiders['returning_count'];
+							$new_percent = $total_buyers > 0 ? round( ($insiders['new_count'] / $total_buyers) * 100 ) : 0;
+							$ret_percent = $total_buyers > 0 ? round( ($insiders['returning_count'] / $total_buyers) * 100 ) : 0;
+							?>
+							<div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #1f2937;">
+								<span style="font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+									<span style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
+									<?php esc_html_e( 'New Buyers', 'opti-analytics' ); ?>
+								</span>
+								<span style="font-weight: 600;"><?php echo esc_html( "{$insiders['new_count']} ({$new_percent}%)" ); ?></span>
+							</div>
+							<div style="display: flex; justify-content: space-between; font-size: 13px; color: #1f2937;">
+								<span style="font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+									<span style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; display: inline-block;"></span>
+									<?php esc_html_e( 'Returning Buyers', 'opti-analytics' ); ?>
+								</span>
+								<span style="font-weight: 600;"><?php echo esc_html( "{$insiders['returning_count']} ({$ret_percent}%)" ); ?></span>
+							</div>
+
+							<!-- Micro Progress Bar -->
+							<div style="display: flex; height: 6px; border-radius: 9999px; overflow: hidden; background: #e5e7eb; margin-top: 14px;">
+								<div style="width: <?php echo esc_attr( (string) $new_percent ); ?>%; background: #22c55e;"></div>
+								<div style="width: <?php echo esc_attr( (string) $ret_percent ); ?>%; background: #3b82f6;"></div>
+							</div>
+						</div>
+						<div class="kpi-cell-desc" style="margin-top: 16px;">(<?php esc_html_e( 'First-time vs repeat buyers in selected range', 'opti-analytics' ); ?>)</div>
+					</div>
+
+					<!-- Column 3: Customer Behavior & Value -->
+					<div class="kpi-cell">
+						<div class="kpi-cell-title" style="color: #334155; font-weight: 600;">
+							<span class="dashicons dashicons-admin-users" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
+							<?php esc_html_e( 'Value & Engagement', 'opti-analytics' ); ?>
+						</div>
+						<div style="margin-top: 10px; font-size: 13px; line-height: 1.6; color: #1f2937;">
+							<?php
+							$repeat_rate = $insiders['unique_count'] > 0 ? round( ($insiders['repeat_count'] / $insiders['unique_count']) * 100, 1 ) : 0.0;
+							?>
+							<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+								<span style="font-weight: 500;"><?php esc_html_e( 'Avg. Spend / Customer', 'opti-analytics' ); ?></span>
+								<span style="font-weight: 600; color: #0f172a;"><?php echo wp_kses_post( wc_price( $insiders['avg_spend'] ) ); ?></span>
+							</div>
+							<div style="display: flex; justify-content: space-between;">
+								<span style="font-weight: 500;"><?php esc_html_e( 'Repeat Purchase Rate', 'opti-analytics' ); ?></span>
+								<span style="font-weight: 600; color: #0f172a;"><?php echo esc_html( "{$repeat_rate}%" ); ?></span>
+							</div>
+							<div style="font-size: 11px; color: #646970; margin-top: 6px; font-style: italic;">
+								<?php
+								/* translators: 1: repeat customers count, 2: total unique customers */
+								printf( esc_html__( '%1$d of %2$d buyers placed 2+ orders', 'opti-analytics' ), (int) $insiders['repeat_count'], (int) $insiders['unique_count'] );
+								?>
+							</div>
+						</div>
+						<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'Average spend and repeat customer percentages', 'opti-analytics' ); ?>)</div>
 					</div>
 				</div>
 			</div>
