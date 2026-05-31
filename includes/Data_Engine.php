@@ -340,7 +340,7 @@ class Data_Engine {
 		$sales = array();
 		if ( ! empty( $order_ids ) ) {
 			$ids_list = implode( ',', array_map( 'intval', $order_ids ) );
-			// Query for sum of quantities per product_id/variation_id
+			// Query for sum of quantities per product_id/variation_id.
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$results = $wpdb->get_results(
 				"SELECT 
@@ -380,7 +380,7 @@ class Data_Engine {
 		}
 
 		// 3. Fetch Bottom 3 Slow-Moving
-		$in_stock_args = array(
+		$in_stock_args     = array(
 			'status'       => 'publish',
 			'stock_status' => 'instock',
 			'limit'        => -1,
@@ -392,7 +392,7 @@ class Data_Engine {
 			$pid      = $product->get_id();
 			$qty_sold = $sales[ $pid ] ?? 0;
 			$stock    = $product->managing_stock() ? (int) $product->get_stock_quantity() : null;
-			
+
 			$candidates[] = array(
 				'id'       => $pid,
 				'name'     => $product->get_name(),
@@ -401,15 +401,18 @@ class Data_Engine {
 			);
 		}
 
-		// Sort: lowest qty sold first, then highest stock first
-		usort( $candidates, function( $a, $b ) {
-			if ( $a['qty_sold'] !== $b['qty_sold'] ) {
-				return $a['qty_sold'] <=> $b['qty_sold'];
+		// Sort: lowest qty sold first, then highest stock first.
+		usort(
+			$candidates,
+			function ( $a, $b ) {
+				if ( $a['qty_sold'] !== $b['qty_sold'] ) {
+					return $a['qty_sold'] <=> $b['qty_sold'];
+				}
+				$a_stock = $a['stock'] ?? 0;
+				$b_stock = $b['stock'] ?? 0;
+				return $b_stock <=> $a_stock;
 			}
-			$a_stock = $a['stock'] ?? 0;
-			$b_stock = $b['stock'] ?? 0;
-			return $b_stock <=> $a_stock;
-		});
+		);
 
 		$slow_candidates = array_slice( $candidates, 0, 3 );
 		foreach ( $slow_candidates as $cand ) {
@@ -482,18 +485,18 @@ class Data_Engine {
 			);
 		}
 
-		$customers = array();
+		$customers       = array();
 		$total_sales_sum = 0.0;
 		foreach ( $db_results as $row ) {
 			$email = trim( strtolower( $row->billing_email ?? '' ) );
 			if ( empty( $email ) ) {
 				continue;
 			}
-			$name  = trim( $row->name ?? '' );
+			$name = trim( $row->name ?? '' );
 			if ( empty( $name ) ) {
 				$name = $email;
 			}
-			$total = (float) ( $row->order_total ?? 0.0 );
+			$total            = (float) ( $row->order_total ?? 0.0 );
 			$total_sales_sum += $total;
 
 			if ( ! isset( $customers[ $email ] ) ) {
@@ -514,20 +517,23 @@ class Data_Engine {
 		$insiders['unique_count'] = count( $customers );
 		$insiders['avg_spend']    = $total_sales_sum / $insiders['unique_count'];
 
-		// Calculate Repeat Customers
+		// Calculate Repeat Customers.
 		$repeat_count = 0;
 		foreach ( $customers as $c ) {
 			if ( $c['order_count'] > 1 ) {
-				$repeat_count++;
+				++$repeat_count;
 			}
 		}
 		$insiders['repeat_count'] = $repeat_count;
 
-		// Calculate VIP
+		// Calculate VIP.
 		$sorted_customers = $customers;
-		uasort( $sorted_customers, function( $a, $b ) {
-			return $b['total_spend'] <=> $a['total_spend'];
-		});
+		uasort(
+			$sorted_customers,
+			function ( $a, $b ) {
+				return $b['total_spend'] <=> $a['total_spend'];
+			}
+		);
 		$vip_sliced = array_slice( $sorted_customers, 0, 3 );
 		foreach ( $vip_sliced as $email => $data ) {
 			$insiders['vip'][] = array(
@@ -537,7 +543,7 @@ class Data_Engine {
 			);
 		}
 
-		// Calculate New vs Returning (emails with orders before start date)
+		// Calculate New vs Returning (emails with orders before start date).
 		$emails_list = "'" . implode( "','", array_map( 'esc_sql', array_keys( $customers ) ) ) . "'";
 		if ( $is_hpos ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -566,9 +572,9 @@ class Data_Engine {
 		$returning_count  = 0;
 		foreach ( $customers as $email => $data ) {
 			if ( isset( $returning_emails[ $email ] ) ) {
-				$returning_count++;
+				++$returning_count;
 			} else {
-				$new_count++;
+				++$new_count;
 			}
 		}
 

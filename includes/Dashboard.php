@@ -794,7 +794,7 @@ class Dashboard {
 			// ── 1. TRANSACTION & GATEWAY FEES (P&L Impacting Custom Fields) ──
 			$fees_fields = array();
 
-			// Revenue fields (order-level)
+			// Revenue fields (order-level).
 			foreach ( $revenue_order_fields as $f ) {
 				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
@@ -802,7 +802,7 @@ class Dashboard {
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
 				);
 			}
-			// Revenue fields (line item)
+			// Revenue fields (line item).
 			foreach ( $revenue_product_fields as $f ) {
 				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
@@ -810,7 +810,7 @@ class Dashboard {
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
 				);
 			}
-			// Cost fields (order-level)
+			// Cost fields (order-level).
 			foreach ( $cost_order_fields as $f ) {
 				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
@@ -818,7 +818,7 @@ class Dashboard {
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
 				);
 			}
-			// Cost fields (line item)
+			// Cost fields (line item).
 			foreach ( $cost_product_fields as $f ) {
 				$fees_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
@@ -830,7 +830,7 @@ class Dashboard {
 			// ── 2. VIEW ONLY FIELDS (Non-P&L Custom Fields) ──
 			$view_only_fields = array();
 
-			// View only fields (order-level)
+			// View only fields (order-level).
 			foreach ( $vo_order_fields as $f ) {
 				$view_only_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
@@ -838,7 +838,7 @@ class Dashboard {
 					'value' => wp_kses_post( wc_price( $metrics[ $f ] ?? 0.0 ) ),
 				);
 			}
-			// View only fields (line item)
+			// View only fields (line item).
 			foreach ( $vo_product_fields as $f ) {
 				$view_only_fields[ $f ] = array(
 					'label' => Data_Engine::get_custom_field_label( $f ),
@@ -906,7 +906,7 @@ class Dashboard {
 
 			<!-- Block 4: Inventory Status & Stock Velocity -->
 			<?php
-			$oos_ids = wc_get_products(
+			$oos_ids      = wc_get_products(
 				array(
 					'status'       => 'publish',
 					'stock_status' => 'outofstock',
@@ -927,10 +927,10 @@ class Dashboard {
 				}
 			}
 
-			// Fetch product velocity data
+			// Fetch product velocity data.
 			$order_ids_for_velocity = array();
 			if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
-				$args_vel = array(
+				$args_vel               = array(
 					'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
 					'limit'        => -1,
 					'return'       => 'ids',
@@ -1077,7 +1077,7 @@ class Dashboard {
 						<div style="padding: 20px; max-height: 350px; overflow-y: auto;">
 							<ul style="margin: 0; padding: 0; list-style: none;">
 								<?php foreach ( $oos_products as $idx => $p ) : ?>
-									<li style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; <?php echo $idx === count($oos_products)-1 ? 'border-bottom: none;' : ''; ?>">
+									<li style="padding: 10px 12px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; <?php echo ( count( $oos_products ) - 1 ) === $idx ? 'border-bottom: none;' : ''; ?>">
 										<span style="font-size: 13px; font-weight: 500; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;" title="<?php echo esc_attr( $p['name'] ); ?>">
 											<?php echo esc_html( $p['name'] ); ?>
 										</span>
@@ -1137,7 +1137,7 @@ class Dashboard {
 
 		$order_ids = array();
 		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
-			$args = array(
+			$args      = array(
 				'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
 				'limit'        => -1,
 				'return'       => 'ids',
@@ -1195,8 +1195,8 @@ class Dashboard {
 						<div style="margin-top: 12px;">
 							<?php
 							$total_buyers = $insiders['new_count'] + $insiders['returning_count'];
-							$new_percent = $total_buyers > 0 ? round( ($insiders['new_count'] / $total_buyers) * 100 ) : 0;
-							$ret_percent = $total_buyers > 0 ? round( ($insiders['returning_count'] / $total_buyers) * 100 ) : 0;
+							$new_percent  = $total_buyers > 0 ? round( ( $insiders['new_count'] / $total_buyers ) * 100 ) : 0;
+							$ret_percent  = $total_buyers > 0 ? round( ( $insiders['returning_count'] / $total_buyers ) * 100 ) : 0;
 							?>
 							<div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #1f2937;">
 								<span style="font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
@@ -1230,7 +1230,7 @@ class Dashboard {
 						</div>
 						<div style="margin-top: 10px; font-size: 13px; line-height: 1.6; color: #1f2937;">
 							<?php
-							$repeat_rate = $insiders['unique_count'] > 0 ? round( ($insiders['repeat_count'] / $insiders['unique_count']) * 100, 1 ) : 0.0;
+							$repeat_rate = $insiders['unique_count'] > 0 ? round( ( $insiders['repeat_count'] / $insiders['unique_count'] ) * 100, 1 ) : 0.0;
 							?>
 							<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 								<span style="font-weight: 500;"><?php esc_html_e( 'Avg. Spend / Customer', 'opti-analytics' ); ?></span>
