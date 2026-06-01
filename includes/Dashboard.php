@@ -906,19 +906,19 @@ class Dashboard {
 
 			<!-- Block 4: Inventory Status & Stock Velocity -->
 			<?php
-			$oos_ids      = wc_get_products(
+			$oos_products_data = wc_get_products(
 				array(
 					'status'       => 'publish',
 					'stock_status' => 'outofstock',
-					'return'       => 'ids',
-					'limit'        => -1,
+					'return'       => 'objects',
+					'limit'        => 3, // Only fetch what we need for the UI, not all items.
+					'paginate'     => true,
 				)
 			);
-			$oos_count    = count( $oos_ids );
-			$oos_class    = $oos_count > 0 ? 'opti-inventory-alert' : '';
-			$oos_products = array();
-			foreach ( $oos_ids as $id ) {
-				$product = wc_get_product( $id );
+			$oos_count         = $oos_products_data->total;
+			$oos_class         = $oos_count > 0 ? 'opti-inventory-alert' : '';
+			$oos_products      = array();
+			foreach ( $oos_products_data->products as $product ) {
 				if ( $product ) {
 					$oos_products[] = array(
 						'name' => $product->get_name(),
