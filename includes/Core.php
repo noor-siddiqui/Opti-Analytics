@@ -61,6 +61,11 @@ class Core {
 		$this->dashboard->register_hooks();
 		$this->settings->register_hooks();
 		$this->order_snapshot->register_hooks();
+
+		// Clear dashboard transient caches when order data changes.
+		add_action( 'woocommerce_new_order', array( Data_Engine::class, 'clear_cache' ) );
+		add_action( 'woocommerce_order_status_changed', array( Data_Engine::class, 'clear_cache' ) );
+		add_action( 'woocommerce_update_order', array( Data_Engine::class, 'clear_cache' ) );
 	}
 
 

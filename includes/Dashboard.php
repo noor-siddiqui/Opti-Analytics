@@ -277,6 +277,9 @@ class Dashboard {
 	/**
 	 * Calculates the start and end dates based on the filter.
 	 *
+	 * Validates custom date inputs to ensure Y-m-d format. Invalid dates
+	 * are silently rejected to prevent malformed SQL queries.
+	 *
 	 * @param string $filter    The date filter string.
 	 * @param string $date_from Custom from date.
 	 * @param string $date_to   Custom to date.
@@ -344,8 +347,16 @@ class Dashboard {
 				$end_date   = gmdate( 'Y-12-31', (int) $last_year );
 				break;
 			case 'custom':
-				$start_date = $date_from;
-				$end_date   = $date_to;
+				// Validate Y-m-d format to prevent malformed date strings reaching SQL.
+				if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date_from ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date_to ) ) {
+					$from_parts = explode( '-', $date_from );
+					$to_parts   = explode( '-', $date_to );
+					if ( checkdate( (int) $from_parts[1], (int) $from_parts[2], (int) $from_parts[0] )
+						&& checkdate( (int) $to_parts[1], (int) $to_parts[2], (int) $to_parts[0] ) ) {
+						$start_date = $date_from;
+						$end_date   = $date_to;
+					}
+				}
 				break;
 		}
 
@@ -357,6 +368,10 @@ class Dashboard {
 
 	/**
 	 * Renders the Dashboard tab content.
+	 *
+	 * Centralizes all data fetching: single wc_get_orders() call, single Data_Engine
+	 * instance, and single Settings parse — then passes shared data to sub-render methods
+	 * to avoid redundant queries.
 	 */
 	private function render_dashboard_tab(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Simple GET filter form without state mutation.
@@ -368,11 +383,43 @@ class Dashboard {
 		$dates = $this->get_date_range( $date_filter, $date_from, $date_to );
 		$this->render_filters( $dates, $date_filter, $date_from, $date_to );
 
+		// ── CENTRALIZED DATA FETCHING ──────────────────────────────
+		// Single Data_Engine instance shared by all rendering methods.
+		$engine = new Data_Engine();
+
+		// Single wc_get_orders() call — reused for metrics, velocity, and customer insiders.
+		$order_ids = array();
+		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
+			$order_ids = wc_get_orders(
+				array(
+					'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
+					'limit'        => -1,
+					'return'       => 'ids',
+					'status'       => array( 'wc-completed', 'wc-processing' ),
+				)
+			);
+		}
+
+		// Single Settings parse — reused by Data_Engine and rendering methods.
+		$custom_fields = array(
+			'revenue_builtins'       => get_option( Settings::PNL_REVENUE_BUILTINS, array() ),
+			'cost_builtins'          => get_option( Settings::PNL_COST_BUILTINS, array() ),
+			'revenue_order_fields'   => Settings::parse_csv_option( Settings::PNL_REVENUE_ORDER_FIELDS ),
+			'revenue_product_fields' => Settings::parse_csv_option( Settings::PNL_REVENUE_PRODUCT_FIELDS ),
+			'cost_order_fields'      => Settings::parse_csv_option( Settings::PNL_COST_ORDER_FIELDS ),
+			'cost_product_fields'    => Settings::parse_csv_option( Settings::PNL_COST_PRODUCT_FIELDS ),
+			'vo_order_fields'        => Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS ),
+			'vo_product_fields'      => Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS ),
+		);
+
+		// Get metrics once, pass to rendering.
+		$metrics = $engine->get_dashboard_metrics( $order_ids, $custom_fields );
+
 		?>
 		<div class="opti-sortable-dashboard" id="opti_sortable_dashboard">
 			<?php
-			$this->render_performance_kpis( $dates );
-			$this->render_customer_insiders( $dates );
+			$this->render_performance_kpis( $metrics, $order_ids, $engine, $custom_fields, $dates );
+			$this->render_customer_insiders( $order_ids, $engine, $dates );
 			?>
 		</div>
 		<?php
@@ -465,33 +512,13 @@ class Dashboard {
 	/**
 	 * Renders the Performance KPI grid.
 	 *
-	 * @param array<string, string> $dates Computed start and end dates.
+	 * @param array<string, float|int>      $metrics       Pre-computed dashboard metrics.
+	 * @param array<int>                    $order_ids     Pre-fetched order IDs.
+	 * @param Data_Engine                   $engine        Shared Data_Engine instance.
+	 * @param array<string, array<string>>  $custom_fields Pre-parsed custom field configuration.
+	 * @param array<string, string>         $dates         Computed start and end dates.
 	 */
-	private function render_performance_kpis( array $dates ): void {
-		$engine  = new Data_Engine();
-		$metrics = array(
-			'total_sales'             => 0.0,
-			'net_sales'               => 0.0,
-			'gross_sales'             => 0.0,
-			'orders_count'            => 0.0,
-			'products_sold'           => 0.0,
-			'average_items_per_order' => 0.0,
-			'shipping'                => 0.0,
-			'out_of_stock'            => 0.0,
-			'aov'                     => 0.0,
-			'discounted_total'        => 0.0,
-			'off_total'               => 0.0,
-			'cogs'                    => 0.0,
-			'actual_shipping_cost'    => 0.0,
-			'total_revenue'           => 0.0,
-			'total_costs'             => 0.0,
-			'gross_profit'            => 0.0,
-			'net_profit'              => 0.0,
-			'profit_margin'           => 0.0,
-		);
-		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
-			$metrics = $engine->get_dashboard_metrics( $dates['start'], $dates['end'] );
-		}
+	private function render_performance_kpis( array $metrics, array $order_ids, Data_Engine $engine, array $custom_fields, array $dates ): void {
 
 		$kpis = array(
 			'total_sales'             => array(
@@ -569,22 +596,22 @@ class Dashboard {
 			),
 		);
 
-		// Add custom revenue & cost fields as KPI cards.
+		// Add custom revenue & cost fields as KPI cards (using pre-parsed custom_fields).
 		$pnl_custom_groups = array(
 			array(
-				'fields' => Settings::parse_csv_option( Settings::PNL_REVENUE_ORDER_FIELDS ),
+				'fields' => $custom_fields['revenue_order_fields'],
 				'desc'   => __( 'Revenue — order-level (summed per order)', 'opti-analytics' ),
 			),
 			array(
-				'fields' => Settings::parse_csv_option( Settings::PNL_REVENUE_PRODUCT_FIELDS ),
+				'fields' => $custom_fields['revenue_product_fields'],
 				'desc'   => __( 'Revenue — line item (value × qty)', 'opti-analytics' ),
 			),
 			array(
-				'fields' => Settings::parse_csv_option( Settings::PNL_COST_ORDER_FIELDS ),
+				'fields' => $custom_fields['cost_order_fields'],
 				'desc'   => __( 'Cost — order-level (summed per order)', 'opti-analytics' ),
 			),
 			array(
-				'fields' => Settings::parse_csv_option( Settings::PNL_COST_PRODUCT_FIELDS ),
+				'fields' => $custom_fields['cost_product_fields'],
 				'desc'   => __( 'Cost — line item (value × qty)', 'opti-analytics' ),
 			),
 		);
@@ -602,14 +629,14 @@ class Dashboard {
 			}
 		}
 
-		// Add View Only fields (dashboard display, no P&L impact).
+		// Add View Only fields (dashboard display, no P&L impact) — using pre-parsed custom_fields.
 		$vo_groups = array(
 			array(
-				'fields' => Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS ),
+				'fields' => $custom_fields['vo_order_fields'],
 				'desc'   => __( 'View only — order-level (summed per order)', 'opti-analytics' ),
 			),
 			array(
-				'fields' => Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS ),
+				'fields' => $custom_fields['vo_product_fields'],
 				'desc'   => __( 'View only — line item (value × qty)', 'opti-analytics' ),
 			),
 		);
@@ -784,12 +811,13 @@ class Dashboard {
 
 			<!-- Block 3: Granular Gateway & Operational Fees -->
 			<?php
-			$revenue_order_fields   = Settings::parse_csv_option( Settings::PNL_REVENUE_ORDER_FIELDS );
-			$revenue_product_fields = Settings::parse_csv_option( Settings::PNL_REVENUE_PRODUCT_FIELDS );
-			$cost_order_fields      = Settings::parse_csv_option( Settings::PNL_COST_ORDER_FIELDS );
-			$cost_product_fields    = Settings::parse_csv_option( Settings::PNL_COST_PRODUCT_FIELDS );
-			$vo_order_fields        = Settings::parse_csv_option( Settings::VIEWONLY_ORDER_FIELDS );
-			$vo_product_fields      = Settings::parse_csv_option( Settings::VIEWONLY_PRODUCT_FIELDS );
+			// Use pre-parsed custom_fields for rendering (no redundant Settings::parse_csv_option calls).
+			$revenue_order_fields   = $custom_fields['revenue_order_fields'];
+			$revenue_product_fields = $custom_fields['revenue_product_fields'];
+			$cost_order_fields      = $custom_fields['cost_order_fields'];
+			$cost_product_fields    = $custom_fields['cost_product_fields'];
+			$vo_order_fields        = $custom_fields['vo_order_fields'];
+			$vo_product_fields      = $custom_fields['vo_product_fields'];
 
 			// ── 1. TRANSACTION & GATEWAY FEES (P&L Impacting Custom Fields) ──
 			$fees_fields = array();
@@ -906,39 +934,26 @@ class Dashboard {
 
 			<!-- Block 4: Inventory Status & Stock Velocity -->
 			<?php
-			$oos_ids      = wc_get_products(
+			// Single out-of-stock query — get full product objects to avoid N individual wc_get_product() calls.
+			$oos_products_raw = wc_get_products(
 				array(
 					'status'       => 'publish',
 					'stock_status' => 'outofstock',
-					'return'       => 'ids',
 					'limit'        => -1,
 				)
 			);
-			$oos_count    = count( $oos_ids );
+			$oos_count    = count( $oos_products_raw );
 			$oos_class    = $oos_count > 0 ? 'opti-inventory-alert' : '';
 			$oos_products = array();
-			foreach ( $oos_ids as $id ) {
-				$product = wc_get_product( $id );
-				if ( $product ) {
-					$oos_products[] = array(
-						'name' => $product->get_name(),
-						'id'   => $product->get_id(),
-					);
-				}
+			foreach ( $oos_products_raw as $product ) {
+				$oos_products[] = array(
+					'name' => $product->get_name(),
+					'id'   => $product->get_id(),
+				);
 			}
 
-			// Fetch product velocity data.
-			$order_ids_for_velocity = array();
-			if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
-				$args_vel               = array(
-					'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
-					'limit'        => -1,
-					'return'       => 'ids',
-					'status'       => array( 'wc-completed', 'wc-processing' ),
-				);
-				$order_ids_for_velocity = wc_get_orders( $args_vel );
-			}
-			$velocity = $engine->get_product_velocity( $order_ids_for_velocity );
+			// Fetch product velocity data (reusing pre-fetched order IDs).
+			$velocity = $engine->get_product_velocity( $order_ids, $dates );
 			?>
 			<div class="opti-dashboard-sort-item" data-block-id="inventory">
 				<div class="opti-metric-block opti-theme-slate <?php echo esc_attr( $oos_class ); ?>">
@@ -948,29 +963,29 @@ class Dashboard {
 							<?php esc_html_e( 'Inventory Status & Stock Velocity', 'opti-analytics' ); ?>
 						</h3>
 					</div>
-					<div class="opti-metric-block-grid grid-3-col">
+					<div class="opti-metric-block-grid grid-4-col">
 						<!-- Card 1: Out of Stock -->
 						<div class="kpi-cell">
 							<div class="kpi-cell-title" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>>
 								<?php esc_html_e( 'Out of Stock Products', 'opti-analytics' ); ?> <span style="font-weight: bold; font-size: 16px;" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>><?php echo esc_html( (string) $oos_count ); ?></span>
 							</div>
 
-							<!-- Inline Out of Stock List (Max 3) -->
+							<!-- Inline Out of Stock List (Max 5) -->
 							<div class="opti-velocity-list" style="margin-top: 10px; margin-bottom: 8px;">
 								<?php if ( ! empty( $oos_products ) ) : ?>
 									<ul style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #991b1b; list-style-type: disc;">
 										<?php
-										$oos_inline = array_slice( $oos_products, 0, 3 );
+										$oos_inline = array_slice( $oos_products, 0, 5 );
 										foreach ( $oos_inline as $item ) :
 											?>
 											<li style="margin-bottom: 2px;">
-												<span style="font-weight: 500; display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
+												<span style="font-weight: 500; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
 											</li>
 										<?php endforeach; ?>
 									</ul>
-									<?php if ( $oos_count > 3 ) : ?>
+									<?php if ( $oos_count > 5 ) : ?>
 										<a href="#" class="opti-show-all-oos" id="opti_show_all_oos" style="font-size: 11px; float: right; margin-top: 4px; color: #2271b1; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 2px;">
 											<?php esc_html_e( 'Show All', 'opti-analytics' ); ?> &rarr;
 										</a>
@@ -986,73 +1001,107 @@ class Dashboard {
 							<div class="kpi-cell-desc" style="clear: both; margin-top: 8px;">(<?php esc_html_e( 'Products currently out of stock', 'opti-analytics' ); ?>)</div>
 						</div>
 
-						<!-- Card 2: Fast-Moving Products (Top 3) -->
+						<!-- Card 2: Top Moving Products -->
 						<div class="kpi-cell">
 							<div class="kpi-cell-title" style="color: #166534; font-weight: 600;">
 								<span class="dashicons dashicons-chart-line" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
-								<?php esc_html_e( 'Top 3 Fast-Moving Items', 'opti-analytics' ); ?>
+								<?php esc_html_e( 'Top 5 Moving Products', 'opti-analytics' ); ?>
 							</div>
 							<div class="opti-velocity-list" style="margin-top: 10px;">
-								<?php if ( ! empty( $velocity['fast_moving'] ) ) : ?>
-									<ol style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #1f2937;">
-										<?php foreach ( $velocity['fast_moving'] as $item ) : ?>
-											<li style="margin-bottom: 4px;">
-												<span style="font-weight: 500; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
+								<?php if ( ! empty( $velocity['top_moving'] ) ) : ?>
+									<ul style="margin: 0; padding-left: 0; list-style-type: none; font-size: 13px; line-height: 1.6; color: #1f2937;">
+										<?php foreach ( $velocity['top_moving'] as $item ) : ?>
+											<li style="margin-bottom: 6px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+												<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
-												<span style="float: right; font-weight: 600; color: #16a34a; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; font-size: 11px;">
-													<?php
-													/* translators: %s: quantity sold */
-													printf( esc_html__( '%s sold', 'opti-analytics' ), esc_html( (string) $item['qty'] ) );
-													?>
+												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+													<span><?php printf( esc_html__( 'Stk: %3$s | %1$s sold (%2$s/d)', 'opti-analytics' ), esc_html( (string) $item['qty'] ), esc_html( number_format( $item['velocity'], 1 ) ), esc_html( (string) $item['stock'] ) ); ?></span>
+													<?php if ( null !== $item['runway'] ) :
+														$runway_days = (int) round( $item['runway'] );
+														$color = $runway_days <= 2 ? '#dc2626' : ($runway_days < 7 ? '#d97706' : '#16a34a');
+														$bg = $runway_days <= 2 ? '#fee2e2' : ($runway_days < 7 ? '#fef3c7' : '#f0fdf4');
+														?>
+														<span style="color: <?php echo esc_attr($color); ?>; background: <?php echo esc_attr($bg); ?>; font-weight: bold; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
+															<?php echo esc_html( (string) $runway_days ) . 'd'; ?>
+														</span>
+													<?php endif; ?>
 												</span>
 											</li>
 										<?php endforeach; ?>
-									</ol>
+									</ul>
 								<?php else : ?>
 									<p style="font-size: 12px; color: #646970; margin: 0; font-style: italic;">
 										<?php esc_html_e( 'No sales data in this range.', 'opti-analytics' ); ?>
 									</p>
 								<?php endif; ?>
 							</div>
-							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'Highest quantities sold in selected range', 'opti-analytics' ); ?>)</div>
+							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'Highest daily velocity and runway', 'opti-analytics' ); ?>)</div>
 						</div>
 
-						<!-- Card 3: Slow-Moving Products (Bottom 3) -->
+						<!-- Card 3: Slow Moving Products -->
 						<div class="kpi-cell">
 							<div class="kpi-cell-title" style="color: #b45309; font-weight: 600;">
-								<span class="dashicons dashicons-clock" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
-								<?php esc_html_e( 'Top 3 Slow-Moving Items', 'opti-analytics' ); ?>
+								🐢 <?php esc_html_e( 'Top 5 Slow Moving Products', 'opti-analytics' ); ?>
 							</div>
 							<div class="opti-velocity-list" style="margin-top: 10px;">
 								<?php if ( ! empty( $velocity['slow_moving'] ) ) : ?>
-									<ol style="margin: 0; padding-left: 15px; font-size: 13px; line-height: 1.6; color: #1f2937;">
+									<ul style="margin: 0; padding-left: 0; list-style-type: none; font-size: 13px; line-height: 1.6; color: #1f2937;">
 										<?php foreach ( $velocity['slow_moving'] as $item ) : ?>
-											<li style="margin-bottom: 4px;">
-												<span style="font-weight: 500; display: inline-block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;" title="<?php echo esc_attr( $item['name'] ); ?>">
+											<li style="margin-bottom: 6px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+												<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
-												<span style="float: right; font-size: 11px; color: #b45309; background: #fffbeb; padding: 1px 6px; border-radius: 4px; font-weight: 600;">
-													<?php
-													if ( null !== $item['stock'] ) {
-														/* translators: 1: quantity sold, 2: stock quantity */
-														printf( esc_html__( '%1$s sold / %2$s stock', 'opti-analytics' ), esc_html( (string) $item['qty'] ), esc_html( (string) $item['stock'] ) );
-													} else {
-														/* translators: %s: quantity sold */
-														printf( esc_html__( '%s sold', 'opti-analytics' ), esc_html( (string) $item['qty'] ) );
-													}
-													?>
+												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+													<span><?php printf( esc_html__( 'Stk: %1$s | Sold: %2$s', 'opti-analytics' ), esc_html( (string) $item['stock'] ), esc_html( (string) $item['qty'] ) ); ?></span>
+													<?php if ( null !== $item['days_idle'] ) : ?>
+														<span style="color: #b45309; background: #fffbeb; font-weight: 600; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
+															<?php echo esc_html( (string) round( $item['days_idle'] ) ) . 'd'; ?>
+														</span>
+													<?php endif; ?>
 												</span>
 											</li>
 										<?php endforeach; ?>
-									</ol>
+									</ul>
 								<?php else : ?>
 									<p style="font-size: 12px; color: #646970; margin: 0; font-style: italic;">
-										<?php esc_html_e( 'No in-stock products found.', 'opti-analytics' ); ?>
+										<?php esc_html_e( 'No slow moving products.', 'opti-analytics' ); ?>
 									</p>
 								<?php endif; ?>
 							</div>
-							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'In-stock items with lowest sales velocity', 'opti-analytics' ); ?>)</div>
+							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'In-stock items with lowest velocity', 'opti-analytics' ); ?>)</div>
+						</div>
+
+						<!-- Card 4: Dead Stock -->
+						<div class="kpi-cell">
+							<div class="kpi-cell-title" style="color: #6b7280; font-weight: 600;">
+								<span class="dashicons dashicons-archive" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
+								<?php esc_html_e( '5 Dead Stock', 'opti-analytics' ); ?>
+							</div>
+							<div class="opti-velocity-list" style="margin-top: 10px;">
+								<?php if ( ! empty( $velocity['dead_stock'] ) ) : ?>
+									<ul style="margin: 0; padding-left: 0; list-style-type: none; font-size: 13px; line-height: 1.6; color: #1f2937;">
+										<?php foreach ( $velocity['dead_stock'] as $item ) : ?>
+											<li style="margin-bottom: 6px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+												<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
+													<?php echo esc_html( $item['name'] ); ?>
+												</span>
+												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+													<span><?php printf( esc_html__( 'Stk: %1$s', 'opti-analytics' ), esc_html( (string) $item['stock'] ) ); ?></span>
+													<span style="font-weight: 600; color: #374151; background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
+														<?php echo wp_kses_post( wc_price( $item['total_amount'] ) ); ?>
+													</span>
+												</span>
+											</li>
+										<?php endforeach; ?>
+									</ul>
+								<?php else : ?>
+									<p style="font-size: 12px; color: #646970; margin: 0; font-style: italic;">
+										<?php esc_html_e( 'No dead stock found.', 'opti-analytics' ); ?>
+									</p>
+								<?php endif; ?>
+							</div>
+							<div class="kpi-cell-desc" style="margin-top: 8px;">(<?php esc_html_e( 'Stock > 0 with zero sales in period', 'opti-analytics' ); ?>)</div>
 						</div>
 					</div>
 				</div>
@@ -1130,22 +1179,11 @@ class Dashboard {
 	/**
 	 * Renders the Customer Insiders block.
 	 *
-	 * @param array<string, string> $dates Computed start and end dates.
+	 * @param array<int>            $order_ids Pre-fetched order IDs.
+	 * @param Data_Engine           $engine    Shared Data_Engine instance.
+	 * @param array<string, string> $dates     Computed start and end dates.
 	 */
-	private function render_customer_insiders( array $dates ): void {
-		$engine = new Data_Engine();
-
-		$order_ids = array();
-		if ( ! empty( $dates['start'] ) && ! empty( $dates['end'] ) ) {
-			$args      = array(
-				'date_created' => $dates['start'] . ' 00:00:00...' . $dates['end'] . ' 23:59:59',
-				'limit'        => -1,
-				'return'       => 'ids',
-				'status'       => array( 'wc-completed', 'wc-processing' ),
-			);
-			$order_ids = wc_get_orders( $args );
-		}
-
+	private function render_customer_insiders( array $order_ids, Data_Engine $engine, array $dates ): void {
 		$insiders = $engine->get_customer_insiders( $order_ids, $dates['start'] ?? '' );
 		?>
 		<div class="opti-dashboard-sort-item" data-block-id="customer_insiders">
