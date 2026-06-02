@@ -51,7 +51,7 @@ class Data_Engine {
 	/**
 	 * Retrieves dashboard metrics for pre-fetched order IDs using Direct Optimized SQL.
 	 *
-	 * @param array<int>    $order_ids     Pre-fetched order IDs for the date range.
+	 * @param array<int>                   $order_ids     Pre-fetched order IDs for the date range.
 	 * @param array<string, array<string>> $custom_fields Pre-parsed custom field configuration with keys:
 	 *   'revenue_builtins', 'cost_builtins', 'revenue_order_fields', 'revenue_product_fields',
 	 *   'cost_order_fields', 'cost_product_fields', 'vo_order_fields', 'vo_product_fields'.
@@ -98,7 +98,7 @@ class Data_Engine {
 
 		// 2. Optimized Base Stats Query.
 		// We use WooCommerce's built-in stats table which is indexed and blazing fast.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 		$base_stats = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT 
@@ -111,6 +111,7 @@ class Data_Engine {
 				...$order_ids
 			)
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
 		if ( $base_stats ) {
 			$metrics['total_sales']   = (float) $base_stats->total_sales;
@@ -158,7 +159,7 @@ class Data_Engine {
 			}
 			$item_selects = implode( ', ', $item_cases );
 
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$item_meta_stats = $wpdb->get_row(
 				$wpdb->prepare(
 					"SELECT {$item_selects}
@@ -172,6 +173,7 @@ class Data_Engine {
 					...$order_ids
 				)
 			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
 			if ( $item_meta_stats ) {
 				foreach ( $all_product_fields as $field ) {
@@ -191,7 +193,7 @@ class Data_Engine {
 			$legacy_args = array_merge( $order_ids, $all_order_fields );
 
 			// Fetch from Legacy Postmeta.
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$legacy_meta = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT post_id as order_id, meta_key, meta_value 
@@ -205,7 +207,6 @@ class Data_Engine {
 			$hpos_meta = array();
 			if ( $is_hpos ) {
 				$hpos_args = array_merge( $order_ids, $all_order_fields );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 				$hpos_meta = $wpdb->get_results(
 					$wpdb->prepare(
 						"SELECT order_id, meta_key, meta_value 
@@ -215,6 +216,7 @@ class Data_Engine {
 					)
 				);
 			}
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
 			// Merge and Deduplicate in PHP.
 			$merged_meta = array();
@@ -383,7 +385,7 @@ class Data_Engine {
 			$id_placeholders = implode( ',', array_fill( 0, count( $order_ids ), '%d' ) );
 
 			// Query for sum of quantities per product_id.
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$results = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT 
@@ -400,6 +402,7 @@ class Data_Engine {
 					...$order_ids
 				)
 			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
 			if ( $results ) {
 				foreach ( $results as $row ) {
@@ -427,10 +430,10 @@ class Data_Engine {
 			$stock    = $product->managing_stock() ? (int) $product->get_stock_quantity() : 0;
 			$qty_sold = $sales[ $pid ] ?? 0.0;
 
-			// Daily Velocity = Total Unit Sold / Days in Period
+			// Daily Velocity = Total Unit Sold / Days in Period.
 			$daily_velocity = $qty_sold / $days_in_period;
 
-			// Days of stock left = Current stock level / Daily Velocity
+			// Days of stock left = Current stock level / Daily Velocity.
 			$runway = null;
 			if ( $daily_velocity > 0 ) {
 				$runway = $stock / $daily_velocity;
@@ -513,7 +516,7 @@ class Data_Engine {
 		$dead_stock_candidates = array_filter(
 			$all_candidates,
 			function ( $c ) {
-				return $c['stock'] > 0 && $c['qty_sold'] == 0;
+				return $c['stock'] > 0 && 0.0 === $c['qty_sold'];
 			}
 		);
 		usort(
@@ -526,7 +529,7 @@ class Data_Engine {
 		);
 		$dead_stock = array_slice( $dead_stock_candidates, 0, 5 );
 
-		// Formatting results
+		// Formatting results.
 		$top_moving_formatted = array();
 		foreach ( $top_moving as $item ) {
 			$top_moving_formatted[] = array(
@@ -603,7 +606,7 @@ class Data_Engine {
 		$is_hpos         = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
 
 		if ( $is_hpos ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$db_results = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT 
@@ -619,7 +622,6 @@ class Data_Engine {
 				)
 			);
 		} else {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$db_results = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT 
@@ -639,6 +641,7 @@ class Data_Engine {
 					...$order_ids
 				)
 			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 		}
 
 		$customers       = array();
@@ -700,8 +703,8 @@ class Data_Engine {
 		}
 
 		// Calculate New vs Returning (emails with orders before start date).
-		$customer_emails     = array_keys( $customers );
-		$email_placeholders  = implode( ',', array_fill( 0, count( $customer_emails ), '%s' ) );
+		$customer_emails    = array_keys( $customers );
+		$email_placeholders = implode( ',', array_fill( 0, count( $customer_emails ), '%s' ) );
 
 		if ( $is_hpos ) {
 			$prior_args = array_merge( $customer_emails, array( $start_date . ' 00:00:00' ) );

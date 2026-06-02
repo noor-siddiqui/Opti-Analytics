@@ -512,11 +512,11 @@ class Dashboard {
 	/**
 	 * Renders the Performance KPI grid.
 	 *
-	 * @param array<string, float|int>      $metrics       Pre-computed dashboard metrics.
-	 * @param array<int>                    $order_ids     Pre-fetched order IDs.
-	 * @param Data_Engine                   $engine        Shared Data_Engine instance.
-	 * @param array<string, array<string>>  $custom_fields Pre-parsed custom field configuration.
-	 * @param array<string, string>         $dates         Computed start and end dates.
+	 * @param array<string, float|int>     $metrics       Pre-computed dashboard metrics.
+	 * @param array<int>                   $order_ids     Pre-fetched order IDs.
+	 * @param Data_Engine                  $engine        Shared Data_Engine instance.
+	 * @param array<string, array<string>> $custom_fields Pre-parsed custom field configuration.
+	 * @param array<string, string>        $dates         Computed start and end dates.
 	 */
 	private function render_performance_kpis( array $metrics, array $order_ids, Data_Engine $engine, array $custom_fields, array $dates ): void {
 
@@ -942,9 +942,9 @@ class Dashboard {
 					'limit'        => -1,
 				)
 			);
-			$oos_count    = count( $oos_products_raw );
-			$oos_class    = $oos_count > 0 ? 'opti-inventory-alert' : '';
-			$oos_products = array();
+			$oos_count        = count( $oos_products_raw );
+			$oos_class        = $oos_count > 0 ? 'opti-inventory-alert' : '';
+			$oos_products     = array();
 			foreach ( $oos_products_raw as $product ) {
 				$oos_products[] = array(
 					'name' => $product->get_name(),
@@ -1016,13 +1016,19 @@ class Dashboard {
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
 												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-													<span><?php printf( esc_html__( 'Stk: %3$s | %1$s sold (%2$s/d)', 'opti-analytics' ), esc_html( (string) $item['qty'] ), esc_html( number_format( $item['velocity'], 1 ) ), esc_html( (string) $item['stock'] ) ); ?></span>
-													<?php if ( null !== $item['runway'] ) :
+													<span>
+													<?php
+													/* translators: 1: units sold, 2: velocity, 3: stock level */
+													printf( esc_html__( 'Stk: %3$s | %1$s sold (%2$s/d)', 'opti-analytics' ), esc_html( (string) $item['qty'] ), esc_html( number_format( $item['velocity'], 1 ) ), esc_html( (string) $item['stock'] ) );
+													?>
+													</span>
+													<?php
+													if ( null !== $item['runway'] ) :
 														$runway_days = (int) round( $item['runway'] );
-														$color = $runway_days <= 2 ? '#dc2626' : ($runway_days < 7 ? '#d97706' : '#16a34a');
-														$bg = $runway_days <= 2 ? '#fee2e2' : ($runway_days < 7 ? '#fef3c7' : '#f0fdf4');
+														$color       = $runway_days <= 2 ? '#dc2626' : ( $runway_days < 7 ? '#d97706' : '#16a34a' );
+														$bg          = $runway_days <= 2 ? '#fee2e2' : ( $runway_days < 7 ? '#fef3c7' : '#f0fdf4' );
 														?>
-														<span style="color: <?php echo esc_attr($color); ?>; background: <?php echo esc_attr($bg); ?>; font-weight: bold; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
+														<span style="color: <?php echo esc_attr( $color ); ?>; background: <?php echo esc_attr( $bg ); ?>; font-weight: bold; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
 															<?php echo esc_html( (string) $runway_days ) . 'd'; ?>
 														</span>
 													<?php endif; ?>
@@ -1053,7 +1059,12 @@ class Dashboard {
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
 												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-													<span><?php printf( esc_html__( 'Stk: %1$s | Sold: %2$s', 'opti-analytics' ), esc_html( (string) $item['stock'] ), esc_html( (string) $item['qty'] ) ); ?></span>
+													<span>
+													<?php
+													/* translators: 1: stock level, 2: units sold */
+													printf( esc_html__( 'Stk: %1$s | Sold: %2$s', 'opti-analytics' ), esc_html( (string) $item['stock'] ), esc_html( (string) $item['qty'] ) );
+													?>
+													</span>
 													<?php if ( null !== $item['days_idle'] ) : ?>
 														<span style="color: #b45309; background: #fffbeb; font-weight: 600; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
 															<?php echo esc_html( (string) round( $item['days_idle'] ) ) . 'd'; ?>
@@ -1087,7 +1098,12 @@ class Dashboard {
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
 												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-													<span><?php printf( esc_html__( 'Stk: %1$s', 'opti-analytics' ), esc_html( (string) $item['stock'] ) ); ?></span>
+													<span>
+													<?php
+													/* translators: %s: stock level */
+													printf( esc_html__( 'Stk: %s', 'opti-analytics' ), esc_html( (string) $item['stock'] ) );
+													?>
+													</span>
 													<span style="font-weight: 600; color: #374151; background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
 														<?php echo wp_kses_post( wc_price( $item['total_amount'] ) ); ?>
 													</span>
