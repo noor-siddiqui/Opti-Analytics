@@ -115,7 +115,12 @@ if ( file_exists( OPTI_ANALYTICS_PLUGIN_DIR . 'plugin-update-checker/plugin-upda
 			__FILE__,
 			'opti-analytics'
 		);
-		/** @var \YahnisElsts\PluginUpdateChecker\v5p6\Vcs\GitHubApi $vcs_api */
+
+		/**
+		 * Enable release assets to download plugin zip file from github release.
+		 *
+		 * @var \YahnisElsts\PluginUpdateChecker\v5p6\Vcs\GitHubApi $vcs_api
+		 */
 		$vcs_api = $my_update_checker->getVcsApi();
 		if ( method_exists( $vcs_api, 'enableReleaseAssets' ) ) {
 			$vcs_api->enableReleaseAssets();
