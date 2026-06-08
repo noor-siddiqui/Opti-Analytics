@@ -141,12 +141,8 @@ class Data_Engine {
 		$all_product_fields = array_unique( array_merge( $revenue_product_fields, $cost_product_fields, $vo_product_fields, array( '_oa_historical_cogs', '_historical_cogs', '_oa_discount_amount' ) ) );
 
 		// Initialize custom fields to 0.
-		foreach ( $all_order_fields as $f ) {
-			$metrics[ $f ] = 0.0;
-		}
-		foreach ( $all_product_fields as $f ) {
-			$metrics[ $f ] = 0.0;
-		}
+		$metrics += array_fill_keys( $all_order_fields, 0.0 );
+		$metrics += array_fill_keys( $all_product_fields, 0.0 );
 
 		// 4. Optimized Product / Line Item Meta Query.
 		// This aggregates custom product data by multiplying (meta_value * _qty).
