@@ -48,7 +48,7 @@ class Dashboard {
 			<h1 class="opti-dashboard-header">
 				<?php esc_html_e( 'Opti Analytics', 'opti-analytics' ); ?>
 				<button type="button" class="page-title-action button button-primary opti-rearrange-btn" id="opti_rearrange_btn">
-					<span class="dashicons dashicons-move" style="font-size: 16px; vertical-align: middle;"></span><?php esc_html_e( 'Rearrange Layout', 'opti-analytics' ); ?>
+					<span class="dashicons dashicons-move" style="font-size: 16px; vertical-align: middle; color: white;"></span><?php esc_html_e( 'Rearrange Layout', 'opti-analytics' ); ?>
 				</button>
 				<button type="button" class="button button-link opti-layout-cancel-btn" id="opti_layout_cancel_btn" style="display: none; margin-left: 10px; padding: 0 8px; vertical-align: middle;">
 					<?php esc_html_e( 'Cancel', 'opti-analytics' ); ?>
@@ -820,7 +820,13 @@ class Dashboard {
 			$vo_product_fields      = $custom_fields['vo_product_fields'];
 
 			// ── 1. TRANSACTION & GATEWAY FEES (P&L Impacting Custom Fields) ──
-			$fees_fields = array();
+			$fees_fields = array(
+				'total_tax' => array(
+					'label' => __( 'Total Tax', 'opti-analytics' ),
+					'desc'  => __( 'Total tax collected on orders', 'opti-analytics' ),
+					'value' => wp_kses_post( wc_price( $metrics['tax_total'] ?? 0.0 ) ),
+				),
+			);
 
 			// Revenue fields (order-level).
 			foreach ( $revenue_order_fields as $f ) {
@@ -966,8 +972,11 @@ class Dashboard {
 					<div class="opti-metric-block-grid grid-4-col">
 						<!-- Card 1: Out of Stock -->
 						<div class="kpi-cell">
-							<div class="kpi-cell-title" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>>
-								<?php esc_html_e( 'Out of Stock Products', 'opti-analytics' ); ?> <span style="font-weight: bold; font-size: 16px;" <?php echo $oos_count > 0 ? 'style="color: #dc2626;"' : ''; ?>><?php echo esc_html( (string) $oos_count ); ?></span>
+							<div class="kpi-cell-title" <?php echo $oos_count > 0 ? 'style="color: #dc2626; font-weight: 500;"' : 'style="font-weight: 500;"'; ?>>
+								<?php
+								/* translators: %d: number of out of stock products */
+								printf( esc_html__( 'Out of Stock Products %d', 'opti-analytics' ), (int) $oos_count );
+								?>
 							</div>
 
 							<!-- Inline Out of Stock List (Max 5) -->
@@ -992,7 +1001,7 @@ class Dashboard {
 									<?php endif; ?>
 								<?php else : ?>
 									<p style="font-size: 12px; color: #166534; margin: 0; font-style: italic; font-weight: 500;">
-										<span class="dashicons dashicons-yes" style="font-size: 14px; width: 14px; height: 14px; vertical-align: middle;"></span>
+										<span class="dashicons dashicons-yes" style="width:14px; height:14px; vertical-align: middle;"></span>
 										<?php esc_html_e( 'All products are in stock.', 'opti-analytics' ); ?>
 									</p>
 								<?php endif; ?>
@@ -1003,20 +1012,19 @@ class Dashboard {
 
 						<!-- Card 2: Top Moving Products -->
 						<div class="kpi-cell">
-							<div class="kpi-cell-title" style="color: #166534; font-weight: 600;">
-								<span class="dashicons dashicons-chart-line" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
-								<?php esc_html_e( 'Top 5 Moving Products', 'opti-analytics' ); ?>
+							<div class="kpi-cell-title" style="color: #166534; font-weight: 500;">
+								<?php esc_html_e( '🦅 Top 5 Moving Products', 'opti-analytics' ); ?>
 							</div>
 							<div class="opti-velocity-list" style="margin-top: 10px;">
 								<?php if ( ! empty( $velocity['top_moving'] ) ) : ?>
 									<ul style="margin: 0; padding-left: 0; list-style-type: none; font-size: 13px; line-height: 1.6; color: #1f2937;">
 										<?php foreach ( $velocity['top_moving'] as $item ) : ?>
 											<li style="margin-bottom: 6px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-												<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
+												<span style="font-weight: 400; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
-												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-													<span>
+												<span style="flex-shrink: 0; max-width: 45%; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+													<span style="color: black; font-weight: 500;">
 													<?php
 													/* translators: 1: units sold, 2: velocity, 3: stock level */
 													printf( esc_html__( 'Stk: %3$s | %1$s sold (%2$s/d)', 'opti-analytics' ), esc_html( (string) $item['qty'] ), esc_html( number_format( $item['velocity'], 1 ) ), esc_html( (string) $item['stock'] ) );
@@ -1047,19 +1055,19 @@ class Dashboard {
 
 						<!-- Card 3: Slow Moving Products -->
 						<div class="kpi-cell">
-							<div class="kpi-cell-title" style="color: #b45309; font-weight: 600;">
-								🐢 <?php esc_html_e( 'Top 5 Slow Moving Products', 'opti-analytics' ); ?>
+							<div class="kpi-cell-title" style="color: #b45309; font-weight: 500;">
+								<?php esc_html_e( '🐌 Top 5 Slow Moving Products', 'opti-analytics' ); ?>
 							</div>
 							<div class="opti-velocity-list" style="margin-top: 10px;">
 								<?php if ( ! empty( $velocity['slow_moving'] ) ) : ?>
 									<ul style="margin: 0; padding-left: 0; list-style-type: none; font-size: 13px; line-height: 1.6; color: #1f2937;">
 										<?php foreach ( $velocity['slow_moving'] as $item ) : ?>
 											<li style="margin-bottom: 6px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-												<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
+												<span style="max-width: 55%; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
-												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-													<span>
+												<span style="max-width: 45%; flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+													<span style="color: black; font-weight: 500;">
 													<?php
 													/* translators: 1: stock level, 2: units sold */
 													printf( esc_html__( 'Stk: %1$s | Sold: %2$s', 'opti-analytics' ), esc_html( (string) $item['stock'] ), esc_html( (string) $item['qty'] ) );
@@ -1085,26 +1093,25 @@ class Dashboard {
 
 						<!-- Card 4: Dead Stock -->
 						<div class="kpi-cell">
-							<div class="kpi-cell-title" style="color: #6b7280; font-weight: 600;">
-								<span class="dashicons dashicons-archive" style="vertical-align: middle; margin-right: 4px; font-size: 16px;"></span>
-								<?php esc_html_e( '5 Dead Stock', 'opti-analytics' ); ?>
+							<div class="kpi-cell-title" style="color: #6b7280; font-weight: 500;">
+								<?php esc_html_e( '🐘 5 Dead Stock', 'opti-analytics' ); ?>
 							</div>
 							<div class="opti-velocity-list" style="margin-top: 10px;">
 								<?php if ( ! empty( $velocity['dead_stock'] ) ) : ?>
 									<ul style="margin: 0; padding-left: 0; list-style-type: none; font-size: 13px; line-height: 1.6; color: #1f2937;">
 										<?php foreach ( $velocity['dead_stock'] as $item ) : ?>
 											<li style="margin-bottom: 6px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-												<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
+												<span style="max-width: 55%; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; min-width: 0;" title="<?php echo esc_attr( $item['name'] ); ?>">
 													<?php echo esc_html( $item['name'] ); ?>
 												</span>
-												<span style="flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
-													<span>
+												<span style="max-width: 45%; flex-shrink: 0; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+													<span style="color: black; font-weight: 500;">
 													<?php
 													/* translators: %s: stock level */
 													printf( esc_html__( 'Stk: %s', 'opti-analytics' ), esc_html( (string) $item['stock'] ) );
 													?>
 													</span>
-													<span style="font-weight: 600; color: #374151; background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
+													<span style="font-weight: 600; color: #f70707; background: #dbf0ff; padding: 1px 4px; border-radius: 3px; font-size: 10px;">
 														<?php echo wp_kses_post( wc_price( $item['total_amount'] ) ); ?>
 													</span>
 												</span>

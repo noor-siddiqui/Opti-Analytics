@@ -82,6 +82,7 @@ class Data_Engine {
 			'off_total'               => 0.0,
 			'cogs'                    => 0.0,
 			'actual_shipping_cost'    => 0.0,
+			'tax_total'               => 0.0,
 			'total_revenue'           => 0.0,
 			'total_costs'             => 0.0,
 			'gross_profit'            => 0.0,
@@ -105,7 +106,8 @@ class Data_Engine {
 					SUM(total_sales) as total_sales,
 					SUM(net_total) as net_sales,
 					SUM(shipping_total) as shipping,
-					SUM(num_items_sold) as products_sold
+					SUM(num_items_sold) as products_sold,
+					SUM(tax_total) as tax_total
 				FROM {$wpdb->prefix}wc_order_stats 
 				WHERE order_id IN ({$id_placeholders})",
 				...$order_ids
@@ -118,6 +120,7 @@ class Data_Engine {
 			$metrics['net_sales']     = (float) $base_stats->net_sales;
 			$metrics['shipping']      = (float) $base_stats->shipping;
 			$metrics['products_sold'] = (float) $base_stats->products_sold;
+			$metrics['tax_total']     = (float) $base_stats->tax_total;
 		}
 
 		// 3. Setup Custom Fields Aggregation (use pre-parsed fields or fetch fresh).

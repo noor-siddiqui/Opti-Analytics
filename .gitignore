@@ -1,7 +1,6 @@
 # Editors and IDEs
 .idea/
 .vscode/
-.agents/
 *.swp
 *.swo
 
