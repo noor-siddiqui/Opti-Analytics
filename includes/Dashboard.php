@@ -941,17 +941,22 @@ class Dashboard {
 			<!-- Block 4: Inventory Status & Stock Velocity -->
 			<?php
 			// Single out-of-stock query — get full product objects to avoid N individual wc_get_product() calls.
+			// ⚡ Bolt Optimization: Using `paginate => true` with a limit prevents loading all
+			// out-of-stock products into memory. This avoids fatal Out Of Memory (OOM) errors
+			// on large stores while still providing the accurate `$oos_products_raw->total` count.
+			// Expected Impact: Drastic reduction in peak memory usage on stores with thousands of products.
 			$oos_products_raw = wc_get_products(
 				array(
 					'status'       => 'publish',
 					'stock_status' => 'outofstock',
-					'limit'        => -1,
+					'limit'        => 50,
+					'paginate'     => true,
 				)
 			);
-			$oos_count        = count( $oos_products_raw );
+			$oos_count        = $oos_products_raw->total;
 			$oos_class        = $oos_count > 0 ? 'opti-inventory-alert' : '';
 			$oos_products     = array();
-			foreach ( $oos_products_raw as $product ) {
+			foreach ( $oos_products_raw->products as $product ) {
 				$oos_products[] = array(
 					'name' => $product->get_name(),
 					'id'   => $product->get_id(),
