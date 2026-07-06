@@ -940,18 +940,19 @@ class Dashboard {
 
 			<!-- Block 4: Inventory Status & Stock Velocity -->
 			<?php
-			// Single out-of-stock query — get full product objects to avoid N individual wc_get_product() calls.
-			$oos_products_raw = wc_get_products(
-				array(
-					'status'       => 'publish',
-					'stock_status' => 'outofstock',
-					'limit'        => -1,
-				)
-			);
-			$oos_count        = count( $oos_products_raw );
-			$oos_class        = $oos_count > 0 ? 'opti-inventory-alert' : '';
-			$oos_products     = array();
-			foreach ( $oos_products_raw as $product ) {
+				// Optimize memory: Use paginate to get accurate total count and subset of products to avoid OOM.
+				$oos_query = wc_get_products(
+					array(
+						'status'       => 'publish',
+						'stock_status' => 'outofstock',
+						'limit'        => 50,
+						'paginate'     => true,
+					)
+				);
+				$oos_count = $oos_query->total;
+			$oos_class     = $oos_count > 0 ? 'opti-inventory-alert' : '';
+			$oos_products  = array();
+			foreach ( $oos_query->products as $product ) {
 				$oos_products[] = array(
 					'name' => $product->get_name(),
 					'id'   => $product->get_id(),
